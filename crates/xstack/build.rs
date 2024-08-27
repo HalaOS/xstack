@@ -1,5 +1,3 @@
-#![allow(unexpected_cfgs)]
-
 fn main() {
     #[cfg(not(feature = "docrs"))]
     // Use this in build.rs
