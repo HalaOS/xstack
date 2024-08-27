@@ -107,7 +107,7 @@ struct RawMemoryPeerBook {
     peer_addrs: HashMap<Multiaddr, PeerId>,
 }
 
-/// An in memory [`RouteTable`] implementation
+/// An in memory [`PeerBook`] implementation
 #[derive(Default)]
 pub struct MemoryPeerBook(Mutex<RawMemoryPeerBook>);
 

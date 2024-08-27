@@ -46,14 +46,11 @@ protoc-bin-vendored = "^3"
 protobuf = "^3"
 # rasi
 rasi = { version = "^0.2" }
-rasi-spec = { version = "^0.2" }
 rasi-mio = { version = "^0.2" }
 ringbuf-rs = { version = "^0.2" }
 # futures
 futures-boring = { version = "^0.2" }
 futures-map = { version = "^0.2" }
-futures-http = { version = "^0.2" }
-futures-jsonrpcv2 = { version = "^0.2" }
 futures-quic = { version = "^0.2" }
 futures-yamux = { version = "^0.2" }
 futures-dnsv2 = { version = "^0.2" }

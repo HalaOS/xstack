@@ -10,7 +10,8 @@ use std::{
 use futures::{lock::Mutex, AsyncReadExt, AsyncWriteExt, TryStreamExt};
 use futures_map::KeyWaitMap;
 use identity::{PeerId, PublicKey};
-use immutable::{ImmutableSwitch, SwitchBuilder};
+use immutable::ImmutableSwitch;
+pub use immutable::SwitchBuilder;
 use listener::ProtocolListener;
 use multiaddr::Multiaddr;
 use multistream_select::{dialer_select_proto, listener_select_proto, Version};
@@ -560,17 +561,17 @@ impl Switch {
 }
 
 impl Switch {
-    /// Remove [`PeerInfo`] from the [`PeerBook`] of this switch.
+    /// Remove [`PeerInfo`] from the [`PeerBook`](super::book::PeerBook) of this switch.
     pub async fn remove_peer(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.remove(peer_id).await?)
     }
 
-    /// Update the [`PeerBook`] of this switch.
+    /// Update the [`PeerBook`](super::book::PeerBook) of this switch.
     pub async fn add_peer(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.put(peer_info).await?)
     }
 
-    /// Update the connection type of the [`peer_id`](PeerId) in the [`PeerBook`] of this switch.
+    /// Update the connection type of the [`peer_id`](PeerId) in the [`PeerBook`](super::book::PeerBook) of this switch.
     pub async fn update_conn_type(
         &self,
         peer_id: &PeerId,

@@ -1,4 +1,4 @@
-//! This module provides route table abstraction for [`KadSwitch`](crate::KadSwitch).
+//! This module provides route table abstraction for `Kad`.
 
 use std::collections::HashMap;
 
