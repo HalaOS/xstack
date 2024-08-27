@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use identity::PeerId;
+use libp2p_identity::PeerId;
 
 use crate::{multiaddr::ToSockAddr, transport::TransportConnection};
 

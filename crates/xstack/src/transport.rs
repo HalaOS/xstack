@@ -14,7 +14,7 @@ pub mod syscall {
     };
 
     use async_trait::async_trait;
-    use identity::PublicKey;
+    use libp2p_identity::PublicKey;
     use multiaddr::Multiaddr;
 
     use crate::switch::Switch;

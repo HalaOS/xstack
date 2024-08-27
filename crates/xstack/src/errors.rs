@@ -1,4 +1,4 @@
-use identity::PeerId;
+use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use multistream_select::NegotiationError;
 
@@ -24,7 +24,7 @@ pub enum Error {
     ProtobufError(#[from] protobuf::Error),
 
     #[error(transparent)]
-    IdentityDecodingError(#[from] identity::DecodingError),
+    IdentityDecodingError(#[from] libp2p_identity::DecodingError),
 
     #[error("Identity check conn({0}) != identify({1})")]
     IdentityCheckFailed(PeerId, PeerId),

@@ -15,7 +15,7 @@ use const_oid::{
     AssociatedOid, ObjectIdentifier,
 };
 use der::{asn1::OctetString, Decode, Encode, Sequence};
-use identity::PublicKey;
+use libp2p_identity::PublicKey;
 use p256::elliptic_curve::{sec1::FromEncodedPoint, CurveArithmetic};
 use p256::{
     ecdsa::{signature::Verifier, VerifyingKey},
@@ -71,7 +71,7 @@ pub enum Error {
     EcdsaSig(#[from] p256::ecdsa::signature::Error),
 
     #[error(transparent)]
-    DecodingErr(#[from] identity::DecodingError),
+    DecodingErr(#[from] libp2p_identity::DecodingError),
 }
 
 impl From<Error> for io::Error {
@@ -148,13 +148,13 @@ impl Libp2pExtension {
 
     /// Verify the libp2p self-signed certificate.
     ///
-    /// On success, returns [`PeerId`](xstack::identity::PeerId) derived from host public key.
+    /// On success, returns [`PeerId`](xstack::libp2p_identity::PeerId) derived from host public key.
     pub fn verify<PubKey: AsRef<[u8]>>(&self, cert_pub_key: PubKey) -> Result<PublicKey> {
         let mut msg = vec![];
         msg.extend(P2P_SIGNING_PREFIX);
         msg.extend(cert_pub_key.as_ref());
 
-        let pub_key = identity::PublicKey::try_decode_protobuf(self.public_key.as_bytes())?;
+        let pub_key = libp2p_identity::PublicKey::try_decode_protobuf(self.public_key.as_bytes())?;
 
         if !pub_key.verify(&msg, self.signature.as_bytes()) {
             return Err(Error::Libp2pCert(
@@ -209,7 +209,7 @@ pub async fn generate(keypair: &KeyStore) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>
 
 /// Parse and verify the libp2p certificate from ASN.1 DER format.
 ///
-/// On success, returns the [`PeerId`](xstack::identity::PeerId) extract from [`libp2p public key extension`](https://github.com/libp2p/specs/blob/master/tls/tls.md)
+/// On success, returns the [`PeerId`](xstack::libp2p_identity::PeerId) extract from [`libp2p public key extension`](https://github.com/libp2p/specs/blob/master/tls/tls.md)
 pub fn verify<D: AsRef<[u8]>>(der: D) -> Result<PublicKey> {
     let cert = Certificate::from_der(der.as_ref())?;
 

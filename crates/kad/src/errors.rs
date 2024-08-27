@@ -1,4 +1,4 @@
-use identity::PeerId;
+use libp2p_identity::PeerId;
 use xstack::multiaddr::{self, Multiaddr};
 
 #[derive(Debug, thiserror::Error)]
@@ -28,7 +28,7 @@ pub enum Error {
     PutValueReturn(String),
 
     #[error(transparent)]
-    ParseError(#[from] identity::ParseError),
+    ParseError(#[from] libp2p_identity::ParseError),
 
     #[error(transparent)]
     MultiaddrError(#[from] multiaddr::Error),

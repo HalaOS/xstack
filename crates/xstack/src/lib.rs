@@ -12,7 +12,7 @@ pub use switch::*;
 mod errors;
 pub use errors::*;
 
-pub use identity;
+pub use libp2p_identity as identity;
 
 #[allow(renamed_and_removed_lints)]
 mod proto;

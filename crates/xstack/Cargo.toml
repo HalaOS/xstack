@@ -9,7 +9,7 @@ version.workspace = true
 
 [dependencies]
 multiaddr = { workspace = true }
-identity = { workspace = true, features = ["ed25519", "rand"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 semver = { workspace = true }
 multistream-select = { workspace = true }
 futures = { workspace = true }

@@ -9,9 +9,9 @@ use std::{
 
 use futures::{lock::Mutex, AsyncReadExt, AsyncWriteExt, TryStreamExt};
 use futures_map::KeyWaitMap;
-use identity::{PeerId, PublicKey};
 use immutable::ImmutableSwitch;
 pub use immutable::SwitchBuilder;
+use libp2p_identity::{PeerId, PublicKey};
 use listener::ProtocolListener;
 use multiaddr::Multiaddr;
 use multistream_select::{dialer_select_proto, listener_select_proto, Version};

@@ -21,7 +21,7 @@ p521 = { workspace = true }
 zeroize = { workspace = true }
 pkcs1 = { workspace = true }
 sec1 = { workspace = true }
-identity = { workspace = true, features = [
+libp2p-identity = { workspace = true, features = [
     "rsa",
     "secp256k1",
     "ecdsa",

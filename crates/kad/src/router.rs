@@ -8,7 +8,7 @@ use std::{
 };
 
 use futures::{channel::mpsc::channel, lock::Mutex, SinkExt, StreamExt};
-use identity::PeerId;
+use libp2p_identity::PeerId;
 use rasi::{task::spawn_ok, timer::TimeoutExt};
 use xstack::{book::PeerInfo, multiaddr::Multiaddr, Switch};
 
@@ -456,7 +456,7 @@ mod tests {
         sync::atomic::{AtomicBool, Ordering},
     };
 
-    use identity::Keypair;
+    use libp2p_identity::Keypair;
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
     use xstack::{global_switch, transport::ProtocolStream, Switch};
     use xstack_dnsaddr::DnsAddr;

@@ -49,13 +49,13 @@ impl From<&[u8]> for Key {
     }
 }
 
-impl From<identity::PeerId> for Key {
-    fn from(value: identity::PeerId) -> Self {
+impl From<libp2p_identity::PeerId> for Key {
+    fn from(value: libp2p_identity::PeerId) -> Self {
         Key::from(&value)
     }
 }
-impl From<&identity::PeerId> for Key {
-    fn from(value: &identity::PeerId) -> Self {
+impl From<&libp2p_identity::PeerId> for Key {
+    fn from(value: &libp2p_identity::PeerId) -> Self {
         Self::from(value.to_bytes())
     }
 }
@@ -112,7 +112,7 @@ mod tests {
 
     use super::*;
 
-    use identity::PeerId;
+    use libp2p_identity::PeerId;
     use quickcheck::*;
 
     impl Arbitrary for Key {

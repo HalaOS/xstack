@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use identity::PeerId;
+use libp2p_identity::PeerId;
 use protobuf::{Message, MessageField};
 
 use xstack::{book::PeerInfo, multiaddr::Multiaddr};

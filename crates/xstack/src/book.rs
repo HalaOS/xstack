@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, io::Result};
 
 use async_trait::async_trait;
 use futures::lock::Mutex;
-use identity::PeerId;
+use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 
 use crate::driver_wrapper;
@@ -65,7 +65,7 @@ pub mod syscall {
     use std::io::Result;
 
     use async_trait::async_trait;
-    use identity::PeerId;
+    use libp2p_identity::PeerId;
     use multiaddr::Multiaddr;
 
     use super::{ConnectionType, PeerInfo};

@@ -15,12 +15,12 @@ use futures_boring::{accept, connect, ec, pkey};
 use futures_yamux::{Reason, YamuxConn, YamuxStream, INIT_WINDOW_SIZE};
 use multistream_select::{dialer_select_proto, listener_select_proto, Version};
 use rasi::net::{TcpListener, TcpStream};
+use uuid::Uuid;
 use xstack::identity::PublicKey;
 use xstack::multiaddr::{Multiaddr, Protocol, ToSockAddr};
 use xstack::transport::syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport};
 use xstack::transport::{Listener, ProtocolStream, TransportConnection};
 use xstack::Switch;
-use uuid::Uuid;
 
 /// The libp2p tcp transport implementation.
 pub struct TcpTransport;

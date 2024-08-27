@@ -3,7 +3,7 @@
 use std::io::Result;
 
 use async_trait::async_trait;
-use identity::{Keypair, PublicKey};
+use libp2p_identity::{Keypair, PublicKey};
 
 use crate::driver_wrapper;
 
@@ -12,7 +12,7 @@ pub mod syscall {
     use std::io::Result;
 
     use async_trait::async_trait;
-    use identity::PublicKey;
+    use libp2p_identity::PublicKey;
 
     #[async_trait]
     pub trait DriverKeyStore: Sync + Send {
