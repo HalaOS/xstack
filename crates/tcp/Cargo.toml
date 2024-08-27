@@ -27,9 +27,3 @@ pretty_env_logger = { workspace = true }
 xstack-spec = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 rand = { workspace = true }
-
-[features]
-docrs = []
-
-[package.metadata.docs.rs]
-features = ["docrs"]

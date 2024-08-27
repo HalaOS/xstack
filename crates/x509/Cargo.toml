@@ -31,9 +31,3 @@ thiserror = { workspace = true }
 rand = { workspace = true }
 protobuf = { workspace = true }
 xstack = { workspace = true }
-
-[features]
-docrs = []
-
-[package.metadata.docs.rs]
-features = ["docrs"]

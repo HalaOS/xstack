@@ -22,9 +22,3 @@ rand = { workspace = true }
 futures-test = { workspace = true }
 rasi-mio = { workspace = true }
 pretty_env_logger = { workspace = true }
-
-[features]
-docrs = []
-
-[package.metadata.docs.rs]
-features = ["docrs"]

@@ -13,9 +13,3 @@ rasi-mio = { workspace = true }
 xstack = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
-
-[features]
-docrs = []
-
-[package.metadata.docs.rs]
-features = ["docrs"]

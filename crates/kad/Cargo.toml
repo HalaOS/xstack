@@ -35,9 +35,3 @@ xstack = { workspace = true, features = ["global_register"] }
 [build-dependencies]
 protobuf-codegen = { workspace = true }
 protoc-bin-vendored = { workspace = true }
-
-[features]
-docrs = []
-
-[package.metadata.docs.rs]
-features = ["docrs"]
