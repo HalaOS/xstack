@@ -15,6 +15,7 @@ pub use errors::*;
 #[doc(hidden)]
 pub use libp2p_identity as identity;
 
+#[doc(hidden)]
 #[allow(renamed_and_removed_lints)]
 mod proto;
 
