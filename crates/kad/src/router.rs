@@ -10,7 +10,7 @@ use std::{
 use futures::{channel::mpsc::channel, lock::Mutex, SinkExt, StreamExt};
 use libp2p_identity::PeerId;
 use rasi::{task::spawn_ok, timer::TimeoutExt};
-use xstack::{book::PeerInfo, multiaddr::Multiaddr, Switch};
+use xstack::{multiaddr::Multiaddr, PeerInfo, Switch};
 
 use crate::{
     errors::{Error, Result},

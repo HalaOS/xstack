@@ -5,8 +5,8 @@ use futures_map::KeyWaitMap;
 use multiaddr::Multiaddr;
 
 use crate::{
-    book::{syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
-    keystore::{syscall::DriverKeyStore, KeyStore, MemoryKeyStore},
+    book::{peerbook_syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
+    keystore::{keystore_syscall::DriverKeyStore, KeyStore, MemoryKeyStore},
     transport::{transport_syscall::DriverTransport, Transport},
     Error, Result,
 };

@@ -89,7 +89,7 @@ impl MutableSwitch {
         Ok(self
             .incoming_streams
             .get_mut(id)
-            .ok_or(Error::ProtocolListener(id.0))?
+            .ok_or(Error::ProtocolListener(id.into()))?
             .pop_front())
     }
 

@@ -1,3 +1,5 @@
+//! Implementation of [multiaddr](https://github.com/multiformats/multiaddr) in Rust.
+
 use std::net::{IpAddr, SocketAddr};
 
 pub use multiaddr::*;

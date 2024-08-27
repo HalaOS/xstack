@@ -4,7 +4,7 @@ use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p_identity::PeerId;
 use protobuf::{Message, MessageField};
 
-use xstack::{book::PeerInfo, multiaddr::Multiaddr};
+use xstack::{multiaddr::Multiaddr, PeerInfo};
 
 use crate::{
     errors::{Error, Result},
@@ -257,7 +257,7 @@ pub trait KadRpc: AsyncWrite + AsyncRead + Unpin {
 
 impl<T> KadRpc for T where T: AsyncWrite + AsyncRead + Unpin {}
 
-impl From<proto::rpc::message::ConnectionType> for xstack::book::ConnectionType {
+impl From<proto::rpc::message::ConnectionType> for xstack::ConnectionType {
     fn from(value: proto::rpc::message::ConnectionType) -> Self {
         match value {
             rpc::message::ConnectionType::NOT_CONNECTED => Self::NotConnected,
@@ -268,13 +268,13 @@ impl From<proto::rpc::message::ConnectionType> for xstack::book::ConnectionType 
     }
 }
 
-impl From<xstack::book::ConnectionType> for proto::rpc::message::ConnectionType {
-    fn from(value: xstack::book::ConnectionType) -> Self {
+impl From<xstack::ConnectionType> for proto::rpc::message::ConnectionType {
+    fn from(value: xstack::ConnectionType) -> Self {
         match value {
-            xstack::book::ConnectionType::NotConnected => Self::NOT_CONNECTED,
-            xstack::book::ConnectionType::Connected => Self::CONNECTED,
-            xstack::book::ConnectionType::CanConnect => Self::CAN_CONNECT,
-            xstack::book::ConnectionType::CannotConnect => Self::CANNOT_CONNECT,
+            xstack::ConnectionType::NotConnected => Self::NOT_CONNECTED,
+            xstack::ConnectionType::Connected => Self::CONNECTED,
+            xstack::ConnectionType::CanConnect => Self::CAN_CONNECT,
+            xstack::ConnectionType::CannotConnect => Self::CANNOT_CONNECT,
         }
     }
 }

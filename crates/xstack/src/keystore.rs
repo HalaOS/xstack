@@ -8,7 +8,7 @@ use libp2p_identity::{Keypair, PublicKey};
 use crate::driver_wrapper;
 
 /// A libp2p keystore driver must implement the `Driver-*` traits in this module.
-pub mod syscall {
+pub mod keystore_syscall {
     use std::io::Result;
 
     use async_trait::async_trait;
@@ -25,8 +25,8 @@ pub mod syscall {
 }
 
 driver_wrapper!(
-    ["A type wrapper of [`DriverKeyStore`](syscall::DriverKeyStore)"]
-    KeyStore[syscall::DriverKeyStore]
+    ["A type wrapper of [`DriverKeyStore`](keystore_syscall::DriverKeyStore)"]
+    KeyStore[keystore_syscall::DriverKeyStore]
 );
 
 /// An in memory [`KeyStore`] implementation
@@ -46,7 +46,7 @@ impl MemoryKeyStore {
 }
 
 #[async_trait]
-impl syscall::DriverKeyStore for MemoryKeyStore {
+impl keystore_syscall::DriverKeyStore for MemoryKeyStore {
     /// Returns the public key of the host keypair.
     async fn public_key(&self) -> Result<PublicKey> {
         Ok(self.0.public())

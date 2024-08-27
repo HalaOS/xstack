@@ -9,7 +9,7 @@ version.workspace = true
 
 [dependencies]
 multiaddr = { workspace = true }
-libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rand", "peerid"] }
 semver = { workspace = true }
 multistream-select = { workspace = true }
 futures = { workspace = true }
@@ -29,7 +29,6 @@ protoc-bin-vendored = { workspace = true }
 [features]
 default = ["global_register"]
 global_register = []
-docrs = []
-
-[package.metadata.docs.rs]
-features = ["docrs"]
+secp256k1 = ["libp2p-identity/secp256k1"]
+ecdsa = ["libp2p-identity/ecdsa"]
+rsa = ["libp2p-identity/rsa"]

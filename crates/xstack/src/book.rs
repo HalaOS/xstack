@@ -61,7 +61,7 @@ impl Display for PeerInfo {
 }
 
 /// The `PeerBook` driver must implement the `Driver-*` traits in this module.
-pub mod syscall {
+pub mod peerbook_syscall {
     use std::io::Result;
 
     use async_trait::async_trait;
@@ -97,8 +97,8 @@ pub mod syscall {
 }
 
 driver_wrapper!(
-    ["A type wrapper of [`DriverPeerBook`](syscall::DriverPeerBook)"]
-    PeerBook[syscall::DriverPeerBook]
+    ["A type wrapper of [`DriverPeerBook`](peerbook_syscall::DriverPeerBook)"]
+    PeerBook[peerbook_syscall::DriverPeerBook]
 );
 
 #[derive(Default)]
@@ -112,7 +112,7 @@ struct RawMemoryPeerBook {
 pub struct MemoryPeerBook(Mutex<RawMemoryPeerBook>);
 
 #[async_trait]
-impl syscall::DriverPeerBook for MemoryPeerBook {
+impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
     async fn put(&self, info: PeerInfo) -> Result<Option<PeerInfo>> {
         log::trace!("MemoryPeerBook, put id={}", info.id);
         let mut raw = self.0.lock().await;

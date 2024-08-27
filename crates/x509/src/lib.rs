@@ -36,7 +36,7 @@ use x509_cert::{
     time::Validity,
     Certificate,
 };
-use xstack::keystore::KeyStore;
+use xstack::KeyStore;
 use zeroize::Zeroizing;
 
 use std::io;

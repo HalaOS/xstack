@@ -1,8 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub mod book;
-pub mod keystore;
-pub mod multiaddr;
+mod book;
+pub use book::*;
+
+mod keystore;
+pub use keystore::*;
 
 mod transport;
 pub use transport::*;
@@ -13,7 +15,11 @@ pub use switch::*;
 mod errors;
 pub use errors::*;
 
-pub use libp2p_identity as identity;
+pub mod multiaddr;
+/// A node's network identity keys.
+pub mod identity {
+    pub use libp2p_identity::*;
+}
 
 #[allow(renamed_and_removed_lints)]
 mod proto;

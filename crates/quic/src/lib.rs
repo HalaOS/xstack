@@ -24,10 +24,9 @@ use futures_quic::{
 
 use xstack::{
     identity::PublicKey,
-    keystore::KeyStore,
     multiaddr::{Multiaddr, Protocol, ToSockAddr},
     transport_syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport},
-    ProtocolStream, Switch, TransportConnection, TransportListener,
+    KeyStore, ProtocolStream, Switch, TransportConnection, TransportListener,
 };
 
 async fn create_quic_config(host_key: &KeyStore, timeout: Duration) -> io::Result<Config> {
