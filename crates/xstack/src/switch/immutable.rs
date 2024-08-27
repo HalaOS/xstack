@@ -7,7 +7,7 @@ use multiaddr::Multiaddr;
 use crate::{
     book::{syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
     keystore::{syscall::DriverKeyStore, KeyStore, MemoryKeyStore},
-    transport::{syscall::DriverTransport, Transport},
+    transport::{transport_syscall::DriverTransport, Transport},
     Error, Result,
 };
 

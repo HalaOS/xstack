@@ -26,11 +26,8 @@ use xstack::{
     identity::PublicKey,
     keystore::KeyStore,
     multiaddr::{Multiaddr, Protocol, ToSockAddr},
-    transport::{
-        syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport},
-        Listener, ProtocolStream, TransportConnection,
-    },
-    Switch,
+    transport_syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport},
+    ProtocolStream, Switch, TransportConnection, TransportListener,
 };
 
 async fn create_quic_config(host_key: &KeyStore, timeout: Duration) -> io::Result<Config> {
@@ -105,7 +102,7 @@ impl Default for QuicTransport {
 
 #[async_trait]
 impl DriverTransport for QuicTransport {
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<Listener> {
+    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener> {
         let quic_config = create_quic_config(switch.keystore(), self.0).await?;
 
         let laddrs = laddr.to_sockaddr()?;

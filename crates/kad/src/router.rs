@@ -458,7 +458,7 @@ mod tests {
 
     use libp2p_identity::Keypair;
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
-    use xstack::{global_switch, transport::ProtocolStream, Switch};
+    use xstack::{global_switch, ProtocolStream, Switch};
     use xstack_dnsaddr::DnsAddr;
     use xstack_quic::QuicTransport;
     use xstack_tcp::TcpTransport;

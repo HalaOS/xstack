@@ -5,9 +5,9 @@ use futures_dnsv2::client::DnsLookup;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use xstack::multiaddr::Multiaddr;
-use xstack::transport::syscall::DriverTransport;
-use xstack::transport::{Listener, TransportConnection};
+use xstack::transport_syscall::DriverTransport;
 use xstack::Switch;
+use xstack::{TransportConnection, TransportListener};
 
 /// The `dnsaddr` transport implementation.
 pub struct DnsAddr(DnsLookup, usize);
@@ -58,7 +58,7 @@ impl DnsAddr {
 #[async_trait]
 impl DriverTransport for DnsAddr {
     /// Create a server-side socket with provided [`laddr`](Multiaddr).
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<Listener> {
+    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener> {
         panic!("DnsAddr is not support for `DriverTransport::bind` fn.");
     }
 

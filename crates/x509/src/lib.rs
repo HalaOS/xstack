@@ -25,7 +25,6 @@ use p256::{
     },
 };
 use rand::{rngs::OsRng, thread_rng, Rng};
-use xstack::keystore::KeyStore;
 use rsa::pkcs1::RsaPssParams;
 use sha2::{digest::FixedOutputReset, Digest};
 use x509_cert::{
@@ -37,6 +36,7 @@ use x509_cert::{
     time::Validity,
     Certificate,
 };
+use xstack::keystore::KeyStore;
 use zeroize::Zeroizing;
 
 use std::io;
@@ -148,7 +148,7 @@ impl Libp2pExtension {
 
     /// Verify the libp2p self-signed certificate.
     ///
-    /// On success, returns [`PeerId`](xstack::libp2p_identity::PeerId) derived from host public key.
+    /// On success, returns [`PeerId`](xstack::identity::PeerId) derived from host public key.
     pub fn verify<PubKey: AsRef<[u8]>>(&self, cert_pub_key: PubKey) -> Result<PublicKey> {
         let mut msg = vec![];
         msg.extend(P2P_SIGNING_PREFIX);
@@ -209,7 +209,7 @@ pub async fn generate(keypair: &KeyStore) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>
 
 /// Parse and verify the libp2p certificate from ASN.1 DER format.
 ///
-/// On success, returns the [`PeerId`](xstack::libp2p_identity::PeerId) extract from [`libp2p public key extension`](https://github.com/libp2p/specs/blob/master/tls/tls.md)
+/// On success, returns the [`PeerId`](xstack::identity::PeerId) extract from [`libp2p public key extension`](https://github.com/libp2p/specs/blob/master/tls/tls.md)
 pub fn verify<D: AsRef<[u8]>>(der: D) -> Result<PublicKey> {
     let cert = Certificate::from_der(der.as_ref())?;
 

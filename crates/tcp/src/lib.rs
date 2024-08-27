@@ -18,16 +18,16 @@ use rasi::net::{TcpListener, TcpStream};
 use uuid::Uuid;
 use xstack::identity::PublicKey;
 use xstack::multiaddr::{Multiaddr, Protocol, ToSockAddr};
-use xstack::transport::syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport};
-use xstack::transport::{Listener, ProtocolStream, TransportConnection};
+use xstack::transport_syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport};
 use xstack::Switch;
+use xstack::{ProtocolStream, TransportConnection, TransportListener};
 
 /// The libp2p tcp transport implementation.
 pub struct TcpTransport;
 
 #[async_trait]
 impl DriverTransport for TcpTransport {
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<Listener> {
+    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener> {
         let (cert, pk) = xstack_x509::generate(switch.keystore()).await?;
 
         let cert = X509::from_der(&cert)?;

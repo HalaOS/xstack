@@ -4,7 +4,8 @@ pub mod book;
 pub mod keystore;
 pub mod multiaddr;
 
-pub mod transport;
+mod transport;
+pub use transport::*;
 
 mod switch;
 pub use switch::*;

@@ -10,9 +10,7 @@ use std::{
 use futures::{lock::Mutex, AsyncReadExt, AsyncWriteExt, TryStreamExt};
 use futures_map::KeyWaitMap;
 use immutable::ImmutableSwitch;
-pub use immutable::SwitchBuilder;
 use libp2p_identity::{PeerId, PublicKey};
-use listener::ProtocolListener;
 use multiaddr::Multiaddr;
 use multistream_select::{dialer_select_proto, listener_select_proto, Version};
 use mutable::MutableSwitch;
@@ -24,7 +22,7 @@ use crate::{
     book::{ConnectionType, PeerInfo},
     keystore::KeyStore,
     proto::identity::Identity,
-    transport::{Listener, ProtocolStream, TransportConnection},
+    transport::{ProtocolStream, TransportConnection, TransportListener},
     Error, Result,
 };
 
@@ -32,6 +30,9 @@ mod immutable;
 mod listener;
 mod mutable;
 mod pool;
+
+pub use immutable::SwitchBuilder;
+pub use listener::ProtocolListener;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct ListenerId(usize);
@@ -138,7 +139,7 @@ impl Deref for Switch {
 }
 
 impl Switch {
-    async fn handle_incoming(&self, listener: Listener) -> Result<()> {
+    async fn handle_incoming(&self, listener: TransportListener) -> Result<()> {
         let mut incoming = listener.into_incoming();
 
         while let Some(mut conn) = incoming.try_next().await? {

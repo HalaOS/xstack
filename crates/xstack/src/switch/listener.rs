@@ -17,7 +17,7 @@ impl ProtocolListener {
 
     /// Create a new `ProtocolListener` with `protos`.
     ///
-    /// This function internally calls [`global_switch`] to get [`Switch`] instance,
+    /// This function internally calls [`global_switch`](crate::global_switch) to get [`Switch`] instance,
     /// so calling this function before calling [`register_switch`](crate::register_switch) will cause panic.
     #[cfg(feature = "global_register")]
     #[cfg_attr(docsrs, doc(cfg(feature = "global_register")))]

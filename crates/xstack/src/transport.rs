@@ -7,7 +7,7 @@ use futures::{stream::unfold, AsyncRead, AsyncWrite};
 use crate::{driver_wrapper, switch::Switch};
 
 /// A libp2p transport driver must implement the `Driver-*` traits in this module.
-pub mod syscall {
+pub mod transport_syscall {
     use std::{
         io::Result,
         task::{Context, Poll},
@@ -25,7 +25,7 @@ pub mod syscall {
     #[async_trait]
     pub trait DriverTransport: Send + Sync {
         /// Create a server-side socket with provided [`laddr`](Multiaddr).
-        async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<Listener>;
+        async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener>;
 
         /// Connect to peer with remote peer [`raddr`](Multiaddr).
         async fn connect(&self, raddr: &Multiaddr, switch: Switch) -> Result<TransportConnection>;
@@ -111,16 +111,16 @@ pub mod syscall {
 }
 
 driver_wrapper!(
-    ["A type wrapper of [`DriverTransport`](syscall::DriverTransport)"]
-    Transport[syscall::DriverTransport]
+    ["A type wrapper of [`DriverTransport`](transport_syscall::DriverTransport)"]
+    Transport[transport_syscall::DriverTransport]
 );
 
 driver_wrapper!(
-    ["A type wrapper of [`DriverListener`](syscall::DriverListener)"]
-    Listener[syscall::DriverListener]
+    ["A type wrapper of [`DriverListener`](transport_syscall::DriverListener)"]
+    TransportListener[transport_syscall::DriverListener]
 );
 
-impl Listener {
+impl TransportListener {
     pub fn into_incoming(self) -> impl futures::Stream<Item = Result<TransportConnection>> + Unpin {
         Box::pin(unfold(self, |mut listener| async move {
             let res = listener.accept().await;
@@ -130,12 +130,12 @@ impl Listener {
 }
 
 driver_wrapper!(
-    ["A type wrapper of [`DriverConnection`](syscall::DriverConnection)"]
-    TransportConnection[syscall::DriverConnection]
+    ["A type wrapper of [`DriverConnection`](transport_syscall::DriverConnection)"]
+    TransportConnection[transport_syscall::DriverConnection]
 );
 
 impl TransportConnection {
-    /// A wrapper of driver's [`close`](syscall::DriverConnection::close) function.
+    /// A wrapper of driver's [`close`](transport_syscall::DriverConnection::close) function.
     ///
     /// This function first removes self from [`Switch`] before calling the driver `close` function.
     pub async fn close(&mut self, switch: &Switch) {
@@ -149,8 +149,8 @@ impl TransportConnection {
 }
 
 driver_wrapper!(
-    ["A type wrapper of [`DriverStream`](syscall::DriverStream)"]
-    ProtocolStream[syscall::DriverStream]
+    ["A type wrapper of [`DriverStream`](transport_syscall::DriverStream)"]
+    ProtocolStream[transport_syscall::DriverStream]
 );
 
 #[cfg(feature = "global_register")]
