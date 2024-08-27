@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.2.5"
+version = "0.2.7"
 
 [workspace.dependencies]
 log = { version = "^0.4" }
@@ -36,7 +36,7 @@ libc = "^0.2"
 bs58 = "0.5.1"
 #libp2p
 multiaddr = "^0.18"
-identity = { version = "^0.2", package = "libp2p-identity" }
+libp2p-identity = { version = "^0.2" }
 semver = "^1.0"
 multistream-select = "^0.13"
 unsigned-varint = "^0.8.0"

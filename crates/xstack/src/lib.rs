@@ -12,6 +12,7 @@ pub use switch::*;
 mod errors;
 pub use errors::*;
 
+#[doc(hidden)]
 pub use libp2p_identity as identity;
 
 #[allow(renamed_and_removed_lints)]
