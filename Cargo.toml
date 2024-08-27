@@ -1,0 +1,67 @@
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "0.2.2"
+
+[workspace.dependencies]
+log = { version = "^0.4" }
+pretty_env_logger = "^0.5"
+clap = "^4.5"
+thiserror = "^1.0"
+futures-test = "^0.3"
+futures = "^0.3"
+rand = { version = "^0.8", features = ["getrandom"] }
+syn = "=2.0.72"
+quickcheck = "1.0"
+async-trait = "^0.1"
+sha2 = { version = "0.10.6" }
+uuid = { version = "1.2.2", features = ["serde", "v4"] }
+const-oid = "0.9.6"
+der = { version = "^0.7" }
+p256 = "^0.13"
+p384 = "^0.13"
+p521 = "^0.13"
+zeroize = "1.7.0"
+pkcs1 = "0.7.5"
+sec1 = "0.7.3"
+rsa = "^0.9"
+x509-cert = "0.2.5"
+generic-array = "^1.1"
+uint = "^0.9"
+protobuf-json-mapping = "3.5.0"
+libc = "^0.2"
+bs58 = "0.5.1"
+#libp2p
+multiaddr = "^0.18"
+identity = { version = "^0.2", package = "libp2p-identity" }
+semver = "^1.0"
+multistream-select = "^0.13"
+unsigned-varint = "^0.8.0"
+# protobuf
+protobuf-codegen = "^3"
+protoc-bin-vendored = "^3"
+protobuf = "^3"
+# rasi
+rasi = { version = "^0.2" }
+rasi-spec = { version = "^0.2" }
+rasi-mio = { version = "^0.2" }
+ringbuf-rs = { version = "^0.2" }
+# futures
+futures-boring = { version = "^0.2" }
+futures-map = { version = "^0.2" }
+futures-http = { version = "^0.2" }
+futures-jsonrpcv2 = { version = "^0.2" }
+futures-quic = { version = "^0.2" }
+futures-yamux = { version = "^0.2" }
+futures-dns = { version = "^0.2" }
+#xstack
+xstack = { path = "crates/xstack", version = "^0.2" }
+xstack-x509 = { path = "crates/x509", version = "^0.2" }
+xstack-spec = { path = "crates/spec", version = "^0.2" }
+xstack-tcp = { path = "crates/tcp", version = "^0.2" }
+xstack-quic = { path = "crates/quic", version = "^0.2" }
+xstack-kad = { path = "crates/kad", version = "^0.2" }
+xstack-dnsaddr = { path = "crates/dnsaddr", version = "^0.2" }
