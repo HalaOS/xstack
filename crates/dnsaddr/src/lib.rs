@@ -1,7 +1,7 @@
 use std::io::Result;
 
 use async_trait::async_trait;
-use futures_dns::client::DnsLookup;
+use futures_dnsv2::client::DnsLookup;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use xstack::multiaddr::Multiaddr;

@@ -56,7 +56,7 @@ futures-http = { version = "^0.2" }
 futures-jsonrpcv2 = { version = "^0.2" }
 futures-quic = { version = "^0.2" }
 futures-yamux = { version = "^0.2" }
-futures-dns = { version = "^0.2" }
+futures-dnsv2 = { version = "^0.2" }
 #xstack
 xstack = { path = "crates/xstack", version = "^0.2" }
 xstack-x509 = { path = "crates/x509", version = "^0.2" }
