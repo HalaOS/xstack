@@ -1,5 +1,7 @@
+#![allow(unexpected_cfgs)]
+
 fn main() {
-    #[cfg(not(docsrs))]
+    #[cfg(not(feature = "docrs"))]
     // Use this in build.rs
     protobuf_codegen::Codegen::new()
         // Use `protoc` parser, optional.

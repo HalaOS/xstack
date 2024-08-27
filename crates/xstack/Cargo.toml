@@ -29,3 +29,6 @@ protoc-bin-vendored = { workspace = true }
 [features]
 default = ["global_register"]
 global_register = []
+
+[package.metadata.docs.rs]
+features = ["docrs"]

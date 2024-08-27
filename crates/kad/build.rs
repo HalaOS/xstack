@@ -1,4 +1,5 @@
 fn main() {
+    #[cfg(not(docsrs))]
     // Use this in build.rs
     protobuf_codegen::Codegen::new()
         // Use `protoc` parser, optional.
