@@ -1,0 +1,31 @@
+[package]
+description = "libp2p stack rewritten from ground up for rust"
+documentation = "https://docs.rs/xstack"
+edition.workspace = true
+license = "MIT"
+name = "xstack"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+multiaddr = { workspace = true }
+identity = { workspace = true, features = ["ed25519", "rand"] }
+semver = { workspace = true }
+multistream-select = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+rasi = { workspace = true, features = ["task-futures"] }
+log = { workspace = true }
+protobuf = { workspace = true }
+unsigned-varint = { workspace = true, features = ["futures"] }
+rand = { workspace = true }
+futures-map = { workspace = true }
+
+[build-dependencies]
+protobuf-codegen = { workspace = true }
+protoc-bin-vendored = { workspace = true }
+
+[features]
+default = ["global_register"]
+global_register = []

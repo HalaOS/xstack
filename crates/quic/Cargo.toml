@@ -1,0 +1,28 @@
+[package]
+description = "The quic transport implementation for xstack"
+documentation = "https://docs.rs/xstack-quic"
+edition.workspace = true
+license = "MIT"
+name = "xstack-quic"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+xstack-x509 = { workspace = true }
+xstack = { workspace = true }
+log = { workspace = true }
+multistream-select = { workspace = true }
+async-trait = { workspace = true }
+futures-boring = { workspace = true }
+futures = { workspace = true }
+rasi = { workspace = true }
+futures-quic = { workspace = true }
+
+[dev-dependencies]
+rasi = { workspace = true, features = ["task-futures"] }
+rasi-mio = { workspace = true }
+futures-test = { workspace = true }
+pretty_env_logger = { workspace = true }
+xstack-spec = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+rand = { workspace = true }

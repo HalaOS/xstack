@@ -1,0 +1,33 @@
+[package]
+description = "utilities for generating/parsing/verify x509 certifacate with libp2p extension"
+documentation = "https://docs.rs/xstack-x509"
+edition.workspace = true
+license = "MIT"
+name = "xstack-x509"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+x509-cert = { workspace = true, features = ["builder", "hazmat"] }
+p256 = { workspace = true, features = ["arithmetic", "pkcs8", "pem"] }
+const-oid = { workspace = true }
+der = { workspace = true }
+# pin syn version=2.0.72
+syn = { workspace = true }
+rsa = { workspace = true }
+sha2 = { workspace = true, features = ["oid"] }
+p384 = { workspace = true }
+p521 = { workspace = true }
+zeroize = { workspace = true }
+pkcs1 = { workspace = true }
+sec1 = { workspace = true }
+identity = { workspace = true, features = [
+    "rsa",
+    "secp256k1",
+    "ecdsa",
+    "ed25519"
+] }
+thiserror = { workspace = true }
+rand = { workspace = true }
+protobuf = { workspace = true }
+xstack = { workspace = true }

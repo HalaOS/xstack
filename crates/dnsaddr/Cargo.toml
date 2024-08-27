@@ -1,0 +1,24 @@
+[package]
+description = "The libp2p dnsaddr transport implementation for xstack."
+documentation = "https://docs.rs/xstack-dnsaddr"
+edition.workspace = true
+license = "MIT"
+name = "xstack-dnsaddr"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+xstack = { workspace = true }
+log = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+xstack-tcp = { workspace = true }
+xstack-quic = { workspace = true }
+async-trait = { workspace = true }
+futures-dns = { workspace = true, features = ["rasi"] }
+rand = { workspace = true }
+
+[dev-dependencies]
+futures-test = { workspace = true }
+rasi-mio = { workspace = true }
+pretty_env_logger = { workspace = true }

@@ -1,0 +1,37 @@
+[package]
+description = "The official kad protocol implementation for xstack."
+documentation = "https://docs.rs/xstack-kad"
+edition.workspace = true
+license = "MIT"
+name = "xstack-kad"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+sha2 = { workspace = true }
+uint = { workspace = true }
+identity = { workspace = true, features = ["peerid", "rand"] }
+generic-array = { workspace = true }
+xstack = { workspace = true }
+protobuf = { workspace = true }
+log = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+unsigned-varint = { workspace = true }
+async-trait = { workspace = true }
+rasi = { workspace = true, features = ["task-futures"] }
+bs58 = { workspace = true }
+
+[dev-dependencies]
+quickcheck = { workspace = true }
+futures-test = { workspace = true }
+rasi-mio = { workspace = true }
+pretty_env_logger = { workspace = true }
+xstack-tcp = { workspace = true }
+xstack-quic = { workspace = true }
+xstack-dnsaddr = { workspace = true }
+xstack = { workspace = true, features = ["global_register"] }
+
+[build-dependencies]
+protobuf-codegen = { workspace = true }
+protoc-bin-vendored = { workspace = true }

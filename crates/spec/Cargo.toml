@@ -1,0 +1,15 @@
+[package]
+description = "The standard test suites for xstack"
+documentation = "https://docs.rs/xstack-spec"
+edition.workspace = true
+license = "MIT"
+name = "xstack-spec"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+rasi = { workspace = true, features = ["task-futures"] }
+rasi-mio = { workspace = true }
+xstack = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
