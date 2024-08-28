@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/HalaOS/xstack/actions/workflows/ci.yaml/badge.svg)](https://github.com/HalaOS/xstack/actions/workflows/ci.yaml)
 [![Release](https://github.com/HalaOS/xstack/actions/workflows/release.yaml/badge.svg)](https://github.com/HalaOS/xstack/actions/workflows/release.yaml)
-[!["Crates.io version"](https://img.shields.io/crates/v/xstack.svg)](https://crates.io/crates/xstack)
 
 **XSTACK** was developed with the primary goal of making it less difficult to use the [`libp2p`](https://libp2p.io/) network stack in rust,
 for this purpose, the API of XSTACK has been designed to closely resemble the std::net library.
