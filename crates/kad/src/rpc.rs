@@ -8,7 +8,10 @@ use xstack::{multiaddr::Multiaddr, PeerInfo};
 
 use crate::{
     errors::{Error, Result},
-    proto::{self, rpc},
+    proto::{
+        self,
+        rpc::{self, message::ConnectionType},
+    },
 };
 
 /// Returns by [`kad_get_providers`](KadRpc::kad_get_providers)
@@ -119,7 +122,7 @@ pub trait KadRpc: AsyncWrite + AsyncRead + Unpin {
                 peers.push(PeerInfo {
                     id: PeerId::from_bytes(&peer.id)?,
                     addrs,
-                    conn_type: peer.connection.enum_value_or_default().into(),
+                    ..Default::default()
                 });
             }
 
@@ -257,28 +260,6 @@ pub trait KadRpc: AsyncWrite + AsyncRead + Unpin {
 
 impl<T> KadRpc for T where T: AsyncWrite + AsyncRead + Unpin {}
 
-impl From<proto::rpc::message::ConnectionType> for xstack::ConnectionType {
-    fn from(value: proto::rpc::message::ConnectionType) -> Self {
-        match value {
-            rpc::message::ConnectionType::NOT_CONNECTED => Self::NotConnected,
-            rpc::message::ConnectionType::CONNECTED => Self::Connected,
-            rpc::message::ConnectionType::CAN_CONNECT => Self::CanConnect,
-            rpc::message::ConnectionType::CANNOT_CONNECT => Self::CannotConnect,
-        }
-    }
-}
-
-impl From<xstack::ConnectionType> for proto::rpc::message::ConnectionType {
-    fn from(value: xstack::ConnectionType) -> Self {
-        match value {
-            xstack::ConnectionType::NotConnected => Self::NOT_CONNECTED,
-            xstack::ConnectionType::Connected => Self::CONNECTED,
-            xstack::ConnectionType::CanConnect => Self::CAN_CONNECT,
-            xstack::ConnectionType::CannotConnect => Self::CANNOT_CONNECT,
-        }
-    }
-}
-
 impl From<PeerInfo> for proto::rpc::message::Peer {
     fn from(value: PeerInfo) -> Self {
         Self::from(&value)
@@ -286,9 +267,24 @@ impl From<PeerInfo> for proto::rpc::message::Peer {
 }
 impl From<&PeerInfo> for proto::rpc::message::Peer {
     fn from(value: &PeerInfo) -> Self {
+        let connection = if value.appear.is_some() {
+            if value.disappear.is_none() {
+                ConnectionType::CONNECTED
+            } else {
+                ConnectionType::CAN_CONNECT
+            }
+        } else {
+            if value.disappear.is_none() {
+                ConnectionType::NOT_CONNECTED
+            } else {
+                ConnectionType::CANNOT_CONNECT
+            }
+        };
+
         Self {
             id: value.id.to_bytes(),
             addrs: value.addrs.iter().map(|addr| addr.to_vec()).collect(),
+            connection: connection.into(),
             ..Default::default()
         }
     }

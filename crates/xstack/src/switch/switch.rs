@@ -5,6 +5,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
+    time::SystemTime,
 };
 
 use super::immutable::ImmutableSwitch;
@@ -19,7 +20,7 @@ use rand::{seq::IteratorRandom, thread_rng};
 use rasi::{task::spawn_ok, timer::TimeoutExt};
 
 use crate::{
-    book::{ConnectionType, PeerInfo},
+    book::PeerInfo,
     keystore::KeyStore,
     proto::identity::Identity,
     transport::{ProtocolStream, TransportConnection, TransportListener},
@@ -166,15 +167,13 @@ impl Switch {
             })
         }
 
-        todo!()
+        Ok(())
     }
 
     async fn setup_conn(&self, conn: &mut TransportConnection) -> Result<()> {
         let this = self.clone();
 
         let mut this_conn = conn.clone();
-
-        let peer_id = conn.public_key().to_peer_id();
 
         spawn_ok(async move {
             if let Err(err) = this.incoming_stream_loop(&mut this_conn).await {
@@ -183,10 +182,6 @@ impl Switch {
             } else {
                 log::info!(target:"switch","incoming stream loop stopped, peer={}, local={}",this_conn.peer_addr(),this_conn.local_addr());
             }
-
-            _ = this
-                .update_conn_type(&peer_id, ConnectionType::CanConnect)
-                .await;
         });
 
         // start "/ipfs/id/1.0.0" handshake.
@@ -337,10 +332,11 @@ impl Switch {
         let peer_info = PeerInfo {
             id: peer_id,
             addrs: raddrs,
-            conn_type: ConnectionType::Connected,
+            appear: Some(SystemTime::now()),
+            ..Default::default()
         };
 
-        self.add_peer(peer_info).await?;
+        self.insert_peer(peer_info).await?;
 
         Ok(())
     }
@@ -454,14 +450,26 @@ impl Switch {
             }
         }
 
-        self.update_conn_type(id, ConnectionType::CannotConnect)
-            .await?;
-
         Err(last_error.unwrap_or(Error::ConnectPeer(id.to_owned())))
     }
 
     pub(crate) async fn remove_conn(&self, conn: &TransportConnection) {
-        _ = self.mutable.lock().await.conn_pool.remove(conn);
+        self.mutable.lock().await.conn_pool.remove(conn);
+
+        let peer_id = conn.public_key().to_peer_id();
+
+        if let Err(err) = self
+            .immutable
+            .peer_book
+            .disappear(&peer_id, SystemTime::now())
+            .await
+        {
+            log::error!(
+                "Failed to update peer's disappearance timestamp, id={}, err={}",
+                peer_id,
+                err
+            );
+        }
     }
 }
 
@@ -482,7 +490,7 @@ impl Switch {
     pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
         log::trace!("{}, try establish transport connection", raddr);
 
-        if let Some(peer_id) = self.peer_id_of(raddr).await? {
+        if let Some(peer_id) = self.listen_on(raddr).await? {
             log::trace!(
                 "{}, found peer_id in local book, peer_id={}",
                 raddr,
@@ -574,22 +582,9 @@ impl Switch {
         Ok(self.immutable.peer_book.remove(peer_id).await?)
     }
 
-    /// Update the [`PeerBook`](crate::book::PeerBook) of this switch.
-    pub async fn add_peer(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>> {
-        Ok(self.immutable.peer_book.put(peer_info).await?)
-    }
-
-    /// Update the connection type of the [`peer_id`](PeerId) in the [`PeerBook`](crate::book::PeerBook) of this switch.
-    pub async fn update_conn_type(
-        &self,
-        peer_id: &PeerId,
-        conn_type: ConnectionType,
-    ) -> Result<Option<ConnectionType>> {
-        Ok(self
-            .immutable
-            .peer_book
-            .update_conn_type(peer_id, conn_type)
-            .await?)
+    /// insert new [`PeerInfo`] into the [`PeerBook`](crate::PeerBook) of this `Switch`
+    pub async fn insert_peer(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>> {
+        Ok(self.immutable.peer_book.insert(peer_info).await?)
     }
 
     /// Returns the [`PeerInfo`] of the [`peer_id`](PeerId).
@@ -597,9 +592,9 @@ impl Switch {
         Ok(self.immutable.peer_book.get(peer_id).await?)
     }
 
-    /// Returns the [`PeerId`] of the [`raddr`](Multiaddr).
-    pub async fn peer_id_of(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
-        Ok(self.immutable.peer_book.peer_id_of(raddr).await?)
+    /// Reverse lookup [`PeerId`] for the peer indicated by the listening address.
+    pub async fn listen_on(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
+        Ok(self.immutable.peer_book.listen_on(raddr).await?)
     }
 
     /// Get associated keystore instance.

@@ -6,6 +6,7 @@ license = "MIT"
 name = "xstack"
 repository = "https://github.com/HalaOS/xstack.git"
 version.workspace = true
+readme = "../../README.md"
 
 [dependencies]
 multiaddr = { workspace = true }

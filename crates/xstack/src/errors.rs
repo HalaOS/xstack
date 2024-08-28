@@ -52,6 +52,9 @@ pub enum Error {
 
     #[error("creating networking stack with null transport stack.")]
     NullTransportStack,
+
+    #[error("Can't find peer in the book.")]
+    PeerNotFound,
 }
 
 /// The result type for this module.

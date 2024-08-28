@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, io::Result};
+use std::{collections::HashMap, fmt::Display, io::Result, time::SystemTime};
 
 use async_trait::async_trait;
 use futures::lock::Mutex;
@@ -6,32 +6,30 @@ use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 
 use crate::driver_wrapper;
-
-/// The variant of connection status type.
-#[derive(Debug, Clone, Copy)]
-pub enum ConnectionType {
-    /// sender does not have a connection to peer, and no extra information (default)
-    NotConnected = 0,
-    /// sender has a live connection to peer
-    Connected = 1,
-
-    /// sender recently connected to peer
-    CanConnect = 2,
-
-    /// sender recently tried to connect to peer repeatedly but failed to connect
-    /// ("try" here is loose, but this should signal "made strong effort, failed")
-    CannotConnect = 3,
-}
-
-/// A type that hold the peer's basic information used by kad protocol.
+/// A `PeerInfo` combines a Peer ID with a set of multiaddrs that the peer is listening on.
 #[derive(Debug, Clone)]
 pub struct PeerInfo {
     /// The peer's public id.
     pub id: PeerId,
-    /// peer listen addresses.
+    /// peer listening addresses.
     pub addrs: Vec<Multiaddr>,
-    /// The peer's status type.
-    pub conn_type: ConnectionType,
+    /// The timestamp of when the peer latest connected.
+    /// `Switch` sets this field after a handshake via the ‘/ipfs/id/1.0.0’ protocol.
+    pub appear: Option<SystemTime>,
+    /// The timestamp of when the peer last disconnected.
+    /// this field is set after disconnecting whether or not the handshake is completed.
+    pub disappear: Option<SystemTime>,
+}
+
+impl Default for PeerInfo {
+    fn default() -> Self {
+        Self {
+            id: PeerId::random(),
+            addrs: Default::default(),
+            appear: Default::default(),
+            disappear: Default::default(),
+        }
+    }
 }
 
 impl PartialEq for PeerInfo {
@@ -40,59 +38,82 @@ impl PartialEq for PeerInfo {
     }
 }
 
-impl Default for PeerInfo {
-    fn default() -> Self {
-        Self {
-            id: PeerId::random(),
-            addrs: vec![],
-            conn_type: ConnectionType::NotConnected,
-        }
-    }
-}
-
 impl Display for PeerInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "id={}, addrs={:?}, conn_type={:?}",
-            self.id, self.addrs, self.conn_type
+            "id={}, addrs={:?}, appear={:?}, disappear={:?}",
+            self.id, self.addrs, self.appear, self.disappear
         )
     }
 }
 
 /// The `PeerBook` driver must implement the `Driver-*` traits in this module.
+///
+/// A `PeerBook` is a type of data struture that the `Switch` used it to hold peers's networking informations.
+///
+///
+/// This is part of **XSTACK** modularity, developers can call [`peer_book`](crate::SwitchBuilder::peer_book)
+/// to set customize implementation; the default implementation used by `Switch` is [`MemoryPeerBook`].
+/// ```no_run
+/// use xstack::Switch;
+///
+/// # async fn boostrap() {
+/// Switch::new("test")
+///       // .peer_book(DatabasePeerBook)
+///       .transport_bind(["/ip4/127.0.0.1/tcp/0"])
+///       .create()
+///       .await
+///       .unwrap()
+///       // register to global context.
+///       .into_global();
+/// # }
+///```
+/// ## Reverse-lookup peer-id
+/// The ability to reverse-lookup [`PeerId`] by address is important for `Swich` to
+/// reuse existing transport layer connections as much as possible,
+/// and is provided by the function [`listen_on`](peerbook_syscall::DriverPeerBook::listen_on).
+///
+/// ## Extensibility
+///
+/// Also, if you want to provide features,e.g: node information persistence, networking analysis,etc.
+/// rewriting `PeerBook` is a good choice!
+///
+/// In the future, the **XSTACK** will provide more usable information for networking analysis programming
+/// by extending [`PeerInfo`] struture.
 pub mod peerbook_syscall {
-    use std::io::Result;
+    use std::{io::Result, time::SystemTime};
 
     use async_trait::async_trait;
     use libp2p_identity::PeerId;
     use multiaddr::Multiaddr;
 
-    use super::{ConnectionType, PeerInfo};
+    use super::PeerInfo;
 
-    /// The main entry point of `PeerBook` implementation
+    /// The customize `PeerBook` must implement this trait.
     #[async_trait]
     pub trait DriverPeerBook: Sync + Send {
-        /// Add new [`PeerInfo`] into the book.
+        /// Insert a new peer informations.
         ///
-        /// On success, returns the older version of [`PeerInfo`].
-        async fn put(&self, info: PeerInfo) -> Result<Option<PeerInfo>>;
+        /// Returns an older version of the [`PeerInfo`] if existing.
+        async fn insert(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>>;
 
-        /// Remove [`PeerInfo`] from the boook by [`peer_id`](PeerId).
+        /// Remove one peer's [`PeerInfo`] from the book indicated by [`peer_id`](PeerId).
         async fn remove(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>>;
 
-        /// Update the connection type of one `peer_id` in the book.
-        async fn update_conn_type(
-            &self,
-            peer_id: &PeerId,
-            conn_type: ConnectionType,
-        ) -> Result<Option<ConnectionType>>;
+        /// Call this function when the peer is connected.
+        /// when the peer is non-existent in the book, returns [`Error::PeerNotFound`](crate::Error::PeerNotFound)
+        async fn appear(&self, peer_id: &PeerId, timestamp: SystemTime) -> Result<()>;
 
-        /// Get a [`PeerInfo`] copy of one [`peer_id`](PeerId)
+        /// Call this function when the peer is disconnected.
+        /// when the peer is non-existent in the book, returns [`Error::PeerNotFound`](crate::Error::PeerNotFound)
+        async fn disappear(&self, peer_id: &PeerId, timestamp: SystemTime) -> Result<()>;
+
+        /// Fetch the [`PeerInfo`] indicated by [`peer_id`](PeerId).
         async fn get(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>>;
 
         /// Reverse lookup [`PeerId`] by [`raddr`](Multiaddr)
-        async fn peer_id_of(&self, raddr: &Multiaddr) -> Result<Option<PeerId>>;
+        async fn listen_on(&self, raddr: &Multiaddr) -> Result<Option<PeerId>>;
     }
 }
 
@@ -113,11 +134,14 @@ pub struct MemoryPeerBook(Mutex<RawMemoryPeerBook>);
 
 #[async_trait]
 impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
-    async fn put(&self, info: PeerInfo) -> Result<Option<PeerInfo>> {
+    async fn insert(&self, mut info: PeerInfo) -> Result<Option<PeerInfo>> {
         log::trace!("MemoryPeerBook, put id={}", info.id);
-        let mut raw = self.0.lock().await;
-        let id = info.id.clone();
 
+        info.disappear = None;
+
+        let mut raw = self.0.lock().await;
+
+        let id = info.id.clone();
         let raddrs = info.addrs.clone();
 
         let older = raw.peer_infos.insert(info.id.clone(), info);
@@ -149,20 +173,20 @@ impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
         Ok(older)
     }
 
-    async fn update_conn_type(
-        &self,
-        peer_id: &PeerId,
-        conn_type: ConnectionType,
-    ) -> Result<Option<ConnectionType>> {
+    async fn appear(&self, peer_id: &PeerId, timestamp: SystemTime) -> Result<()> {
         if let Some(peer_info) = self.0.lock().await.peer_infos.get_mut(peer_id) {
-            let old = peer_info.conn_type;
-
-            peer_info.conn_type = conn_type;
-
-            Ok(Some(old))
-        } else {
-            Ok(None)
+            peer_info.appear = Some(timestamp);
         }
+
+        Ok(())
+    }
+
+    async fn disappear(&self, peer_id: &PeerId, timestamp: SystemTime) -> Result<()> {
+        if let Some(peer_info) = self.0.lock().await.peer_infos.get_mut(peer_id) {
+            peer_info.disappear = Some(timestamp);
+        }
+
+        Ok(())
     }
 
     async fn get(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
@@ -175,7 +199,7 @@ impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
             .map(|info| info.clone()))
     }
 
-    async fn peer_id_of(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
+    async fn listen_on(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
         Ok(self
             .0
             .lock()

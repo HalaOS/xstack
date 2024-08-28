@@ -333,7 +333,7 @@ impl RouterOptions {
                 ..Default::default()
             };
 
-            switch.add_peer(peer_info).await?;
+            switch.insert_peer(peer_info).await?;
         }
 
         Ok(Router {
@@ -437,7 +437,7 @@ impl<'a> RoutingAlogrithm for FindNode<'a> {
                 }
 
                 candidates.push(peer_info.id);
-                switch.add_peer(peer_info).await?;
+                switch.insert_peer(peer_info).await?;
             }
 
             if finished {
