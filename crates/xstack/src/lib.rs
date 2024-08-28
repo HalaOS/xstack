@@ -136,6 +136,10 @@
 //! }
 //! ```
 //!
+//! ## Inside `Switch`
+//!
+//! see [`transport_syscall`] for details
+//!
 //! ## Asynchronous system interface.
 //!
 //! Due to the chaos of *the rust asynchronous programming*, **XSTACK** develop the [`RASI`](https://docs.rs/rasi/latest/rasi/) crate

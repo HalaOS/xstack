@@ -76,7 +76,7 @@ impl Display for PeerInfo {
 ///
 /// ## Extensibility
 ///
-/// Also, if you want to provide features,e.g: node information persistence, networking analysis,etc.
+/// Also, if you want to provide features, such as: node information persistence, networking analysis,etc.
 /// rewriting `PeerBook` is a good choice!
 ///
 /// In the future, the **XSTACK** will provide more usable information for networking analysis programming
