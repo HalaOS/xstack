@@ -7,6 +7,92 @@ use futures::{stream::unfold, AsyncRead, AsyncWrite};
 use crate::{driver_wrapper, switch::Switch};
 
 /// A libp2p transport driver must implement the `Driver-*` traits in this module.
+///
+///
+/// This mod is the core of the **XSTACK** modularity,
+/// all of the [*transport protocols*](https://docs.libp2p.io/concepts/transports/overview/)
+/// that defined by libp2p are developed through this mod.
+/// unlike [`rust-libp2p`](https://docs.rs/libp2p/latest/libp2p/trait.Transport.html),
+/// we use the [**async_trait**](https://docs.rs/async-trait/) crate to define the
+/// [`transport`](transport_syscall::DriverTransport) trait as a way to make it less difficult to understand:
+///
+/// ## Register
+///
+/// Developers can register a customise `Transport` by:
+/// ```no_run
+/// use xstack::Switch;
+///
+/// # async fn boostrap() {
+/// Switch::new("test")
+///       // .transport(NoopTransport)
+///       .create()
+///       .await
+///       .unwrap()
+///       // register to global context.
+///       .into_global();
+/// # }
+///```
+///
+/// The `NoopTransport` is a structure that implement [`DriverTransport`](transport_syscall::DriverTransport) trait.
+///
+/// ## Lifecycle
+///
+/// After register, the `Switch` take over the lifecycle of the `Transport`:
+///
+/// ###  When a *connect* request is arrived
+///
+/// - The `Switch` loop the whole registered *Transports* list
+/// and call their [`multiaddr_hit`](transport_syscall::DriverTransport::multiaddr_hit) function;
+/// when a *Transport* returns true,  stops the loop process and immediately calls its
+/// [`connect`](transport_syscall::DriverTransport::connect) function to create a new
+/// [*transport connection*](transport_syscall::DriverConnection);
+///
+/// - The created [**Connection**](transport_syscall::DriverConnection)
+/// is hosted by an internal connection pool of the `Switch`. and all responses for these requests
+/// from the peer (e.g., [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md),
+/// [identity](https://github.com/libp2p/specs/tree/master/identify),
+/// [identity/push](https://github.com/libp2p/specs/tree/master/identify#identifypush),
+/// etc.) are taken over by it.
+///
+/// - And then, the `Switch` send an *identity* request to the peer via a stream opened on the *created connection*.
+/// after the identity of the peer is confirmed, the `Switch`
+/// [**negotiates**](https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select)
+/// a requested [`ProtocolStream`](crate::ProtocolStream) with the peer and returns it to the caller.
+///
+///
+/// ### When a *bind* request is arrived
+///
+/// - The `Switch` loop the whole registered *Transports* list
+/// and call their [`multiaddr_hit`](transport_syscall::DriverTransport::multiaddr_hit) function;
+/// when a *Transport* returns true,  stops the loop process and immediately calls its
+/// [`bind`](transport_syscall::DriverTransport::bind) function to create a new
+/// [*transport listener*](transport_syscall::DriverListener);
+///
+/// - The created [**Listener**](transport_syscall::DriverListener) is handled by an internal loop task,
+/// and the inbound [**Connection**](transport_syscall::DriverConnection) accepted by it
+/// is hosted by an internal connection pool of the `Switch`. and all responses for these requests
+/// from the peer (e.g., [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md),
+/// [identity](https://github.com/libp2p/specs/tree/master/identify),
+/// [identity/push](https://github.com/libp2p/specs/tree/master/identify#identifypush),
+/// etc.) are taken over by the `Switch`.
+///
+/// - The other requests are dispatch to [`ProtocolListener`](crate::ProtocolListener) by protocol types,
+/// you can create a *protocol listener* like this:
+///
+/// ```no_run
+/// use xstack::ProtocolListener;
+/// use futures::TryStreamExt;
+///
+/// # async fn boostrap() {
+/// let mut incoming = ProtocolListener::bind(["/ipfs/kad/1.0.0"]).await.unwrap().into_incoming();
+///
+/// while let Some((stream,_)) = incoming.try_next().await.unwrap() {
+///     // handle rpc request.
+/// }
+/// # }
+/// ```
+///
+/// ***the parameter passed to the [`bind`](crate::ProtocolListener::bind) function is a protocol list that the listener can accept***
 pub mod transport_syscall {
     use std::{
         io::Result,
@@ -21,7 +107,7 @@ pub mod transport_syscall {
 
     use super::*;
 
-    /// A libp2p transport provider must implement this trait as the transport's main entry type.
+    /// The core trait of the [`Transports`](https://docs.libp2p.io/concepts/transports/overview/).
     #[async_trait]
     pub trait DriverTransport: Send + Sync {
         /// Create a server-side socket with provided [`laddr`](Multiaddr).
@@ -44,6 +130,7 @@ pub mod transport_syscall {
         fn local_addr(&self) -> Result<Multiaddr>;
     }
 
+    /// A secure communication channel that support [*stream muliplexing*](https://docs.libp2p.io/concepts/multiplex/overview/)
     #[async_trait]
     pub trait DriverConnection: Send + Sync + Unpin {
         /// The app scope unique id for this driver connection .
@@ -77,6 +164,9 @@ pub mod transport_syscall {
         fn actives(&self) -> usize;
     }
 
+    /// The [*stream muliplexing*](https://docs.libp2p.io/concepts/multiplex/overview/)
+    /// instance created by [`accept`](DriverConnection::accept) or [`connect`](DriverConnection::connect)
+    /// functions.
     pub trait DriverStream: Sync + Send + Unpin {
         /// Get the stream's uuid.
         fn id(&self) -> &str;

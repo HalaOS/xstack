@@ -91,6 +91,10 @@ pub mod peerbook_syscall {
     use super::PeerInfo;
 
     /// The customize `PeerBook` must implement this trait.
+    ///
+    /// The stabilization of async functions in traits in Rust 1.75 did not include support for
+    /// using traits containing async functions as dyn Trait, so we use the [**async_trait**](https://docs.rs/async-trait/)
+    /// crate to define this trait, to know how to implement the async trait, visit its documentation.
     #[async_trait]
     pub trait DriverPeerBook: Sync + Send {
         /// Insert a new peer informations.

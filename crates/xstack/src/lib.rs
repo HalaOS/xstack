@@ -8,10 +8,13 @@
 //! use xstack::ProtocolStream;
 //!
 //! # async fn boostrap() {
-//! let (stream, negotiated_proto_id) = ProtocolStream::connect(
-//!     "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-//!     ["/ipfs/kad/1.0.0"]
-//! ).await.unwrap();
+//! let (stream, negotiated_proto_id) =
+//!         ProtocolStream::connect(
+//!             "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGv...",
+//!             ["/ipfs/kad/1.0.0"]
+//!         )
+//!         .await
+//!         .unwrap();
 //! # }
 //! ```
 //!
@@ -25,7 +28,7 @@
 //!
 //! ## Server-side listeners.
 //!
-//! There are two types of communication listeners
+//! There are two types of *inbound communication channel* listeners
 //!
 //! ### ***one for the transport layer***
 //!
@@ -132,6 +135,11 @@
 //!     // register_switch(switch);
 //! }
 //! ```
+//!
+//! ## Asynchronous system interface.
+//!
+//! Due to the chaos of *the rust asynchronous programming*, **XSTACK** develop the [`RASI`](https://docs.rs/rasi/latest/rasi/) crate
+//! to access various rust asynchronous runtimes (such as tokio, async-std, etc.).
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
