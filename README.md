@@ -14,10 +14,11 @@ Please refer to the [`docs`](https://docs.rs/xstack) for more details.
 
 ## Status
 
-| crate      | repository |type|status|
+| crate       |  document                     |  type           | status      |
 | ----------- | ------------------------------- | --------------- | ----------- |
-| Core        | [`xstack`](./crates/xstack/)    | framework       | stable      |
-| Quic        | [`quic`](./crates/quic/)        | transport layer | stable      |
-| Tcp         | [`tcp`](./crates/tcp/)          | transport layer | stable      |
-| dnsaddr     | [`dnsaddr`](./crates/dnsaddr/)  | transport layer | available   |
-| Kad         | [`kad`](./crates/kad/)          | protocol layer  | in progress |
+| Core        | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack/0.2.15)
+   | framework       | stable      |
+| Quic        | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-quic/0.2.15)        | transport layer | stable      |
+| Tcp         | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-tcp/0.2.15)          | transport layer | stable      |
+| dnsaddr     | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-dnsaddr/0.2.15)  | transport layer | available   |
+| Kad         | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-kad/0.2.15)          | protocol layer  | in progress |
