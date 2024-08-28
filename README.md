@@ -14,8 +14,8 @@ Please refer to the [`docs`](https://docs.rs/xstack) for more details.
 
 | crate       |  version                                                                      |  type           | status      |
 | :----------- | :---------------------------------------------------------------------------------------------------------------------- | :--------------- | -----------: |
-| Core        | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack/0.2.15)](https://docs.rs/xstack/latest)                | framework       | stable      |
-| Quic        | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-quic/0.2.15)](https://docs.rs/xstack-quic/latest)      | transport layer | stable      |
-| Tcp         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-tcp/0.2.15)](https://docs.rs/xstack-tcp/latest)        | transport layer | stable      |
-| dnsaddr     | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-dnsaddr/0.2.15)](https://docs.rs/xstack-dnsaddr/latest)| transport layer | available   |
-| Kad         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-kad/0.2.15)](https://docs.rs/xstack-kad/latest)        | protocol layer  | in progress |
+| Core        | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack/0.2.15)](https://docs.rs/xstack/latest)                | framework | stable      |
+| Quic        | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-quic/0.2.15)](https://docs.rs/xstack-quic/latest)      | transport | stable      |
+| Tcp         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-tcp/0.2.15)](https://docs.rs/xstack-tcp/latest)        | transport | stable      |
+| dnsaddr     | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-dnsaddr/0.2.15)](https://docs.rs/xstack-dnsaddr/latest)| transport | available   |
+| Kad         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-kad/0.2.15)](https://docs.rs/xstack-kad/latest)        | protocol  | in progress |
