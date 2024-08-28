@@ -14,11 +14,10 @@ Please refer to the [`docs`](https://docs.rs/xstack) for more details.
 
 ## Status
 
-| crate       |  document                     |  type           | status      |
-| ----------- | ------------------------------- | --------------- | ----------- |
-| Core        | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack/0.2.15)
-   | framework       | stable      |
-| Quic        | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-quic/0.2.15)        | transport layer | stable      |
-| Tcp         | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-tcp/0.2.15)          | transport layer | stable      |
-| dnsaddr     | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-dnsaddr/0.2.15)  | transport layer | available   |
-| Kad         | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-kad/0.2.15)          | protocol layer  | in progress |
+| crate       |  document                                                                     |  type           | status      |
+| ----------- | ----------------------------------------------------------------------------- | --------------- | ----------- |
+| Core        | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack/0.2.15)        | framework       | stable      |
+| Quic        | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-quic/0.2.15)   | transport layer | stable      |
+| Tcp         | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-tcp/0.2.15)    | transport layer | stable      |
+| dnsaddr     | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-dnsaddr/0.2.15)| transport layer | available   |
+| Kad         | ![docs.rs (with version)](https://img.shields.io/docsrs/xstack-kad/0.2.15)    | protocol layer  | in progress |
