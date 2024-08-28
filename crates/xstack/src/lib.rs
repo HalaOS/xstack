@@ -87,6 +87,51 @@
 //!
 //!
 //! ### Customize networking stack
+//!
+//! When create a new switch, the framework forces you to specify the transport layer protocols supported
+//! by the stack as well as the listening ports.
+//! see [`transport`](SwitchBuilder::transport) and [`transport_bind`](SwitchBuilder::transport_bind) for
+//! more informations.
+//!
+//! ```no_run
+//! use xstack::Switch;
+//!
+//! # async fn boostrap() {
+//! Switch::new("test")
+//!       // .transport(TcpTransport)
+//!       .transport_bind(["/ip4/127.0.0.1/tcp/0"])
+//!       .create()
+//!       .await
+//!       .unwrap()
+//!       // register to global context.
+//!       .into_global();
+//! # }
+//! ```
+//!
+//! *Also, the framework does not have any restrictions on the protocol layer;
+//! developers can use **XSTACK** directly to develop specific application layer
+//! protocols or build their own frameworks further on top of it.*
+//!
+//!
+//! ## Usability
+//!
+//! Since **XSTACK** is a user-mode network stack, any call
+//! (e.g., [`connect_with`](ProtocolStream::connect_with), [`bind_with`](ProtocolListener::bind_with), etc.)
+//! requires the switch instance as the first argument;
+//! We call this instance the `XSTACK context`, which you can think of as a transport
+//! layer virtual switch for libp2p networks, all of our incoming and outgoing connections
+//! are established through it.
+//!
+//! To make framework even easier to use, we also provide a global `XSTACK context` option(available on **crate feature *global_register*** only).
+//! before calling those functions(e.g., [`connect`](ProtocolStream::connect), [`bind`](ProtocolListener::bind), etc.),
+//! the developers should first register the **global** `XSTACK context`:
+//!
+//! ```no_run
+//! use xstack::register_switch;
+//! fn main() {
+//!     // register_switch(switch);
+//! }
+//! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

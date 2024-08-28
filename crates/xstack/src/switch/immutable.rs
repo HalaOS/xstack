@@ -154,6 +154,10 @@ impl SwitchBuilder {
     pub async fn create(self) -> Result<Switch> {
         let ops = self.ops?;
 
+        if ops.immutable.transports.is_empty() {
+            return Err(Error::NullTransportStack);
+        }
+
         let public_key = ops.immutable.keystore.public_key().await?;
 
         let switch = Switch {

@@ -49,6 +49,9 @@ pub enum Error {
 
     #[error("Protocol listener is not exist or is closed, '{0}'")]
     ProtocolListener(usize),
+
+    #[error("creating networking stack with null transport stack.")]
+    NullTransportStack,
 }
 
 /// The result type for this module.
