@@ -29,7 +29,7 @@ driver_wrapper!(
     KeyStore[keystore_syscall::DriverKeyStore]
 );
 
-/// An in memory [`KeyStore`] implementation
+/// In-memory [`KeyStore`] implementation with random key generation on startup
 pub struct MemoryKeyStore(Keypair);
 
 impl From<Keypair> for MemoryKeyStore {
