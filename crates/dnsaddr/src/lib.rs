@@ -1,3 +1,7 @@
+//! A decorator pattern implementation that adds [**IP and Name Resolution**] capabilities to other transports.
+//!
+//! [**IP and Name Resolution**]: https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution
+
 use std::io::Result;
 
 use async_trait::async_trait;
@@ -9,11 +13,24 @@ use xstack::transport_syscall::DriverTransport;
 use xstack::Switch;
 use xstack::{TransportConnection, TransportListener};
 
-/// The `dnsaddr` transport implementation.
+/// A ip and name resolver for libp2p transport protocols.
+///
+/// Most libp2p transports use the IP protocol as a foundational layer, and as a result, most transport multiaddrs will begin with a component that represents an IPv4 or IPv6 address.
+///
+/// This may be an actual address, such as /ip4/198.51.100 or /ip6/fe80::883:a581:fff1:833, or it could be something that resolves to an IP address, like a domain name.
+///
+/// `DnsAddr` attempt to resolve *name-based* multiaddrs into IP addresses before calling other transports. The current multiaddr protocol table defines four resolvable or "name-based" protocols:
+///
+/// |protocol	|description|
+/// |-----------|-----------|
+/// |dns	    |Resolves DNS A and AAAA records into both IPv4 and IPv6 addresses.|
+/// |dns4	    |Resolves DNS A records into IPv4 addresses.|
+/// |dns6	    |Resolves DNS AAAA records into IPv6 addresses.|
+/// |dnsaddr	|Resolves multiaddrs from a special TXT record.|
 pub struct DnsAddr(DnsLookup, usize);
 
 impl DnsAddr {
-    /// Create `DnsAddr` backed [`DnsLookup`] over udp.
+    /// Use a [`DnsLookup`] created by [`over_udp`](DnsLookup::over_udp) to crate a new `DnsAddr` instance.
     pub async fn new() -> Result<Self> {
         Ok(Self(DnsLookup::over_udp().await?, 10))
     }
