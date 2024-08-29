@@ -288,7 +288,7 @@ pub fn verify<D: AsRef<[u8]>>(der: D) -> Result<PublicKey> {
 // MUST NOT be used, due to the possibility of collision attacks.
 // In particular, MD5 and SHA1 MUST NOT be used.
 // Endpoints MUST abort the connection attempt if it is not used.
-pub fn verify_signature(cert: &Certificate) -> Result<()> {
+fn verify_signature(cert: &Certificate) -> Result<()> {
     match cert.signature_algorithm.oid {
         ECDSA_WITH_SHA_256 => verify_ecsda_with_sha256_signature(cert),
         ECDSA_WITH_SHA_384 => verify_ecsda_with_sha384_signature(cert),
