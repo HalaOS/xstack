@@ -2,7 +2,7 @@ use std::{
     fmt::Debug,
     ops::Deref,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::SystemTime,
@@ -171,12 +171,19 @@ impl Switch {
     }
 
     async fn setup_conn(&self, conn: &mut TransportConnection) -> Result<()> {
+        let authenticated = Arc::new(AtomicBool::default());
+
         let this = self.clone();
 
         let mut this_conn = conn.clone();
 
+        let authenticated_cloned = authenticated.clone();
+
         spawn_ok(async move {
-            if let Err(err) = this.incoming_stream_loop(&mut this_conn).await {
+            if let Err(err) = this
+                .incoming_stream_loop(&mut this_conn, authenticated_cloned)
+                .await
+            {
                 log::error!(target:"switch","incoming stream loop stopped, peer={}, local={}, error={}",this_conn.peer_addr(),this_conn.local_addr(),err);
                 _ = this_conn.close(&this).await;
             } else {
@@ -185,7 +192,7 @@ impl Switch {
         });
 
         // start "/ipfs/id/1.0.0" handshake.
-        self.identity_request(conn)
+        self.identity_request(conn, authenticated)
             .timeout(self.immutable.timeout)
             .await
             .ok_or(Error::Timeout)??;
@@ -193,19 +200,30 @@ impl Switch {
         Ok(())
     }
 
-    async fn incoming_stream_loop(&self, conn: &mut TransportConnection) -> Result<()> {
+    async fn incoming_stream_loop(
+        &self,
+        conn: &mut TransportConnection,
+        authenticated: Arc<AtomicBool>,
+    ) -> Result<()> {
         loop {
             let stream = conn.accept().await?;
 
             let id = stream.id().to_owned();
 
-            if let Err(err) = self.handle_incoming_stream(stream).await {
+            if let Err(err) = self
+                .handle_incoming_stream(stream, authenticated.clone())
+                .await
+            {
                 log::error!(target:"switch","dispatch stream, id={}, err={}", id, err);
             }
         }
     }
 
-    async fn handle_incoming_stream(&self, mut stream: ProtocolStream) -> Result<()> {
+    async fn handle_incoming_stream(
+        &self,
+        mut stream: ProtocolStream,
+        authenticated: Arc<AtomicBool>,
+    ) -> Result<()> {
         log::info!(target:"switch","accept new stream, peer={}, local={}, id={}",stream.peer_addr(),stream.local_addr(),stream.id());
 
         let protos = self.mutable.lock().await.protos();
@@ -225,7 +243,10 @@ impl Switch {
             let local_addr = stream.local_addr().clone();
             let id = stream.id().to_owned();
 
-            if let Err(err) = this.dispatch_stream(protoco_id, stream).await {
+            if let Err(err) = this
+                .dispatch_stream(protoco_id, stream, authenticated)
+                .await
+            {
                 log::error!(target:"switch","dispatch stream, id={}, peer={}, local={}, err={}",id, peer_addr,local_addr,err);
             } else {
                 log::trace!(target:"switch","dispatch stream ok, id={}, peer={}, local={}",id, peer_addr, local_addr);
@@ -235,7 +256,12 @@ impl Switch {
         Ok(())
     }
 
-    async fn dispatch_stream(&self, protoco_id: String, stream: ProtocolStream) -> Result<()> {
+    async fn dispatch_stream(
+        &self,
+        protoco_id: String,
+        stream: ProtocolStream,
+        authenticated: Arc<AtomicBool>,
+    ) -> Result<()> {
         let conn_peer_id = stream.public_key().to_peer_id();
 
         match protoco_id.as_str() {
@@ -243,6 +269,15 @@ impl Switch {
             PROTOCOL_IPFS_PUSH_ID => self.identity_push(&conn_peer_id, stream).await?,
             PROTOCOL_IPFS_PING => self.ping_echo(stream).await?,
             _ => {
+                if !authenticated.load(Ordering::Acquire) {
+                    log::warn!(
+                        "drop unauthenticated stream={}, protocol={}",
+                        stream.id(),
+                        protoco_id
+                    );
+                    return Ok(());
+                }
+
                 let mut mutable = self.mutable.lock().await;
 
                 if let Some(id) = mutable.insert_inbound_stream(stream, protoco_id) {
@@ -342,14 +377,22 @@ impl Switch {
     }
 
     /// Start a "/ipfs/id/1.0.0" handshake.
-    async fn identity_request(&self, conn: &mut TransportConnection) -> Result<()> {
+    async fn identity_request(
+        &self,
+        conn: &mut TransportConnection,
+        authenticated: Arc<AtomicBool>,
+    ) -> Result<()> {
         let mut stream = conn.connect().await?;
 
         let conn_peer_id = conn.public_key().to_peer_id();
 
         dialer_select_proto(&mut stream, ["/ipfs/id/1.0.0"], Version::V1).await?;
 
-        self.identity_push(&conn_peer_id, stream).await
+        self.identity_push(&conn_peer_id, stream).await?;
+
+        authenticated.store(true, Ordering::Release);
+
+        Ok(())
     }
 
     async fn identity_response(&self, mut stream: ProtocolStream) -> Result<()> {
