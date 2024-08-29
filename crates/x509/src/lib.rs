@@ -1,4 +1,6 @@
-//! Utilities for x509 certificate of libp2p
+//! This module provides a set of utilities for generating and validating X.509 certificates based on the <[***libp2p Public Key Extension***]> spec.
+//!
+//! [***libp2p Public Key Extension***]: https://github.com/libp2p/specs/blob/master/tls/tls.md#libp2p-public-key-extension
 
 use std::{
     str::FromStr,
@@ -175,6 +177,29 @@ impl Libp2pExtension {
 /// or they MAY reuse the same key and certificate for multiple connections.
 ///
 /// The `keypair` is the host key provider.
+///
+/// ## On success
+///
+/// this function returns:
+/// - The x.509 certificate, encoded as ASN.1 DER,
+/// - The private key, used to generate and sign this x.509 certificate.
+///
+/// ```no_run
+/// # fn main() {
+///
+/// // let (cert, pk) = xstack_x509::generate(switch.keystore()).await?;
+///
+/// // let cert = X509::from_der(&cert)?;
+///
+/// // let pk = pkey::PKey::from_ec_key(ec::EcKey::private_key_from_der(&pk)?)?;
+///
+/// # }
+/// ```
+///
+/// Refer to [`tcp`] and [`quic`] crates for complete code
+///
+/// [`tcp`]: https://github.com/HalaOS/xstack/tree/main/crates/tcp
+/// [`quic`]: https://github.com/HalaOS/xstack/tree/main/crates/quic
 pub async fn generate(keypair: &KeyStore) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>)> {
     let signer = p256::SecretKey::random(&mut OsRng);
 
@@ -209,7 +234,41 @@ pub async fn generate(keypair: &KeyStore) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>
 
 /// Parse and verify the libp2p certificate from ASN.1 DER format.
 ///
-/// On success, returns the [`PeerId`](xstack::identity::PeerId) extract from [`libp2p public key extension`](https://github.com/libp2p/specs/blob/master/tls/tls.md)
+/// On success, returns the [`PeerId`](xstack::identity::PeerId) extract from
+/// [`libp2p public key extension`](https://github.com/libp2p/specs/blob/master/tls/tls.md).
+///
+/// Codes below shows how to verify libp2p certificate using [`boring`](https://docs.rs/boring/4.9.1/boring/) crate:
+///
+/// ```no_run
+/// # fn main() {
+/// // config.set_custom_verify_callback(SslVerifyMode::PEER, |ssl| {
+/// //    let cert = ssl
+/// //        .peer_certificate()
+/// //        .ok_or(SslVerifyError::Invalid(SslAlert::CERTIFICATE_REQUIRED))?;
+/// //
+/// //    let cert = cert.to_der().map_err(|err| {
+/// //        log::error!("{}", err);
+/// //        SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE)
+/// //    })?;
+/// //
+/// //    let peer_id = xstack_x509::verify(cert)
+/// //        .map_err(|err| {
+/// //            log::error!("{}", err);
+/// //            SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE)
+/// //        })?
+/// //        .to_peer_id();
+/// //
+/// //    log::trace!("ssl_client: verified peer={}", peer_id);
+/// //
+/// //    Ok(())
+/// // });
+/// # }
+/// ```
+///
+/// Refer to [`tcp`] and [`quic`] crates for complete code
+///
+/// [`tcp`]: https://github.com/HalaOS/xstack/tree/main/crates/tcp
+/// [`quic`]: https://github.com/HalaOS/xstack/tree/main/crates/quic
 pub fn verify<D: AsRef<[u8]>>(der: D) -> Result<PublicKey> {
     let cert = Certificate::from_der(der.as_ref())?;
 

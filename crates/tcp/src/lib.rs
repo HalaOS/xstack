@@ -37,7 +37,7 @@ impl DriverTransport for TcpTransport {
         let mut ssl_acceptor_builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls())?;
 
         ssl_acceptor_builder.set_max_proto_version(Some(SslVersion::TLS1_3))?;
-        ssl_acceptor_builder.set_min_proto_version(Some(SslVersion::TLS1_1))?;
+        ssl_acceptor_builder.set_min_proto_version(Some(SslVersion::TLS1_3))?;
 
         ssl_acceptor_builder.set_certificate(&cert)?;
 
@@ -92,7 +92,7 @@ impl DriverTransport for TcpTransport {
         config.set_private_key(&pk)?;
 
         config.set_max_proto_version(Some(SslVersion::TLS1_3))?;
-        config.set_min_proto_version(Some(SslVersion::TLS1_1))?;
+        config.set_min_proto_version(Some(SslVersion::TLS1_3))?;
 
         config.set_custom_verify_callback(SslVerifyMode::PEER, |ssl| {
             let cert = ssl
