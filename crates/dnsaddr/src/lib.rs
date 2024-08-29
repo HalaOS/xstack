@@ -1,5 +1,19 @@
 //! A decorator pattern implementation that adds [**IP and Name Resolution**] capabilities to other transports.
 //!
+//!
+//! Most libp2p transports use the IP protocol as a foundational layer, and as a result, most transport multiaddrs will begin with a component that represents an IPv4 or IPv6 address.
+//!
+//! This may be an actual address, such as /ip4/198.51.100 or /ip6/fe80::883:a581:fff1:833, or it could be something that resolves to an IP address, like a domain name.
+//!
+//! `DnsAddr` attempt to resolve *name-based* multiaddrs into IP addresses before calling other transports. The current multiaddr protocol table defines four resolvable or "name-based" protocols:
+//!
+//! |protocol	|description|
+//! |-----------|-----------|
+//! |dns	    |Resolves DNS A and AAAA records into both IPv4 and IPv6 addresses.|
+//! |dns4	    |Resolves DNS A records into IPv4 addresses.|
+//! |dns6	    |Resolves DNS AAAA records into IPv6 addresses.|
+//! |dnsaddr	|Resolves multiaddrs from a special TXT record.|
+//!
 //! [**IP and Name Resolution**]: https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution
 
 use std::io::Result;
@@ -13,24 +27,33 @@ use xstack::transport_syscall::DriverTransport;
 use xstack::Switch;
 use xstack::{TransportConnection, TransportListener};
 
-/// A ip and name resolver for libp2p transport protocols.
+/// A transport that resolve *name-based* multiaddrs into IP addresses.
 ///
-/// Most libp2p transports use the IP protocol as a foundational layer, and as a result, most transport multiaddrs will begin with a component that represents an IPv4 or IPv6 address.
+/// Add [**IP and Name Resolution**] capabilities to **XSTACK** by:
 ///
-/// This may be an actual address, such as /ip4/198.51.100 or /ip6/fe80::883:a581:fff1:833, or it could be something that resolves to an IP address, like a domain name.
+/// ```no_run
+/// use xstack::Switch;
+/// use xstack_dnsaddr::DnsAddr;
 ///
-/// `DnsAddr` attempt to resolve *name-based* multiaddrs into IP addresses before calling other transports. The current multiaddr protocol table defines four resolvable or "name-based" protocols:
+/// # async fn boostrap() {
+/// let switch = Switch::new("test")
+///       .transport(DnsAddr::new().await.unwrap())
+///       .create()
+///       .await
+///       .unwrap();
 ///
-/// |protocol	|description|
-/// |-----------|-----------|
-/// |dns	    |Resolves DNS A and AAAA records into both IPv4 and IPv6 addresses.|
-/// |dns4	    |Resolves DNS A records into IPv4 addresses.|
-/// |dns6	    |Resolves DNS AAAA records into IPv6 addresses.|
-/// |dnsaddr	|Resolves multiaddrs from a special TXT record.|
+/// let (stream,_) = switch
+///       .connect(
+///            "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+///            ["/ipfs/kad/1.0.0"]
+///       ).await.unwrap();
+/// # }
+/// ```
+/// [**IP and Name Resolution**]: https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution
 pub struct DnsAddr(DnsLookup, usize);
 
 impl DnsAddr {
-    /// Use a [`DnsLookup`] created by [`over_udp`](DnsLookup::over_udp) to crate a new `DnsAddr` instance.
+    /// Create an instance of `DnsAddr` using the system-wide DNS configuration.
     pub async fn new() -> Result<Self> {
         Ok(Self(DnsLookup::over_udp().await?, 10))
     }
