@@ -1,3 +1,5 @@
+//! A [***libp2p TCP transport protocol with TLS encryption***](https://docs.libp2p.io/concepts/secure-comm/tls/) implementation.
+
 use std::io::{self, Result};
 use std::net::SocketAddr;
 use std::pin::Pin;

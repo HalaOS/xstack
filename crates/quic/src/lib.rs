@@ -1,3 +1,5 @@
+//! A [***libp2p quic transport***](https://docs.libp2p.io/concepts/transports/quic/) implementation.
+
 use std::{
     io::{self, Result},
     net::SocketAddr,
