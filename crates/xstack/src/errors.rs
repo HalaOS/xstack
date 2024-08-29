@@ -26,8 +26,8 @@ pub enum Error {
     #[error(transparent)]
     IdentityDecodingError(#[from] libp2p_identity::DecodingError),
 
-    #[error("Identity check conn({0}) != identify({1})")]
-    IdentityCheckFailed(PeerId, PeerId),
+    #[error("Check connection peer_id failed")]
+    AuthenticateFailed,
 
     #[error(transparent)]
     Multiaddr(#[from] multiaddr::Error),

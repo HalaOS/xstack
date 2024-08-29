@@ -266,7 +266,10 @@ impl Switch {
 
         match protoco_id.as_str() {
             PROTOCOL_IPFS_ID => self.identity_response(stream).await?,
-            PROTOCOL_IPFS_PUSH_ID => self.identity_push(&conn_peer_id, stream).await?,
+            PROTOCOL_IPFS_PUSH_ID => {
+                self.identity_push(&conn_peer_id, stream).await?;
+                authenticated.store(true, Ordering::Release);
+            }
             PROTOCOL_IPFS_PING => self.ping_echo(stream).await?,
             _ => {
                 if !authenticated.load(Ordering::Acquire) {
@@ -346,7 +349,12 @@ impl Switch {
         let peer_id = pubkey.to_peer_id();
 
         if *conn_peer_id != peer_id {
-            return Err(Error::IdentityCheckFailed(*conn_peer_id, peer_id));
+            log::trace!(
+                "authenticate peer failed, connection peer_id={}, identity represents peer_id={}",
+                conn_peer_id,
+                peer_id
+            );
+            return Err(Error::AuthenticateFailed);
         }
 
         let raddrs = identity
@@ -445,6 +453,19 @@ impl Switch {
         if let Err(err) = self.setup_conn(&mut conn).await {
             log::error!("{}, setup error: {}", raddr, err);
         } else {
+            if let Some(multiaddr::Protocol::P2p(id)) = raddr.clone().pop() {
+                let conn_peer_id = conn.public_key().to_peer_id();
+                if conn_peer_id != id {
+                    log::error!(
+                        "connec to={} peer_id mismatch, expect={}, got={}",
+                        raddr,
+                        id,
+                        conn_peer_id
+                    );
+                    return Err(Error::AuthenticateFailed);
+                }
+            }
+
             log::trace!("{}, setup success", raddr);
             self.mutable.lock().await.conn_pool.put(conn.clone());
         }
@@ -477,7 +498,12 @@ impl Switch {
         let mut last_error = None;
 
         for raddr in peer_info.addrs {
-            log::trace!("{}, connect to {}", id, raddr);
+            let raddr = match raddr.with_p2p(id.clone()) {
+                Ok(raddr) => raddr,
+                Err(raddr) => raddr,
+            };
+
+            log::trace!("connect to {}", raddr);
 
             match self.transport_connect_prv(&raddr).await {
                 Ok(conn) => {
