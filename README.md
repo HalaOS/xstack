@@ -8,7 +8,7 @@ for this purpose, the API of XSTACK has been designed to closely resemble the st
 
 ## Usage
 
-Please refer to the [`docs`](https://docs.rs/xstack) for more details.
+Refers to the [`rustdoc`](https://docs.rs/xstack) for technical details.
 
 ## Status
 
