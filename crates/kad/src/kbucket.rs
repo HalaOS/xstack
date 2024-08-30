@@ -7,12 +7,14 @@ use std::{
     },
 };
 
-use futures::lock::Mutex;
+use futures::{lock::Mutex, StreamExt};
 use generic_array::GenericArray;
 use libp2p_identity::PeerId;
 
 use rasi::task::spawn_ok;
-use xstack::{ProtocolStream, Switch};
+use xstack::{events, EventSource, ProtocolStream, Switch};
+
+use crate::{Error, Result};
 
 mod uint {
     use uint::construct_uint;
@@ -52,11 +54,16 @@ impl<const K: usize> KBucket<K> {
 
         return None;
     }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 /// The distance type outlined in the Kademlia [**paper**]
 ///
 /// [**paper**]: https://doi.org/10.1007/3-540-45748-8_5
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct KBucketDistance(uint::U256);
 
 impl KBucketDistance {
@@ -75,6 +82,7 @@ impl Display for KBucketDistance {
 }
 
 /// The key type of [`KBucketTable`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct KBucketKey(uint::U256);
 
 impl KBucketKey {
@@ -133,21 +141,90 @@ struct RawKBucketTable<const K: usize> {
 impl<const K: usize> RawKBucketTable<K> {
     /// On success, returns None.
     fn try_insert(&mut self, peer_id: PeerId) -> Option<PeerId> {
-        let index = KBucketKey::from(peer_id)
+        let k_index = KBucketKey::from(peer_id)
             .distance(&self.local_key)
             .k_index()
             .expect("Insert local peer's id") as usize;
 
-        if let Some(index) = self.k_index[index] {
-            return self.k_buckets[index].try_insert(peer_id);
+        if let Some(index) = self.k_index[k_index] {
+            let r = self.k_buckets[index].try_insert(peer_id);
+
+            if r.is_none() {
+                log::trace!("peer_id={}, insert k-bucket({})", peer_id, k_index);
+            }
+
+            r
         } else {
+            log::trace!("peer_id={}, insert k-bucket({})", peer_id, k_index,);
             self.k_buckets.push(KBucket::new(peer_id));
+            self.k_index[k_index] = Some(self.k_buckets.len() - 1);
             None
         }
     }
 
-    fn closest(&mut self, _key: KBucketKey) -> Vec<PeerId> {
-        todo!()
+    fn closest(&mut self, key: KBucketKey) -> Result<Vec<PeerId>> {
+        let k_index = key
+            .distance(&self.local_key)
+            .k_index()
+            .ok_or(Error::Closest)? as usize;
+
+        let mut peers = vec![];
+
+        if let Some(bucket) = self.bucket(k_index) {
+            peers = bucket.0.iter().rev().cloned().collect();
+        }
+
+        let mut step = 1usize;
+
+        while peers.len() < K {
+            if k_index >= step {
+                if let Some(bucket) = self.bucket(k_index - step) {
+                    if bucket.len() + peers.len() > K {
+                        let offset = bucket.len() + peers.len() - K;
+
+                        for peer_id in bucket.0.iter().collect::<Vec<_>>()[offset..].iter().rev() {
+                            peers.push(**peer_id);
+                        }
+
+                        break;
+                    }
+
+                    for peer_id in bucket.0.iter().rev() {
+                        peers.push(*peer_id);
+                    }
+                }
+            } else if k_index + step >= self.k_index.len() {
+                break;
+            }
+
+            if k_index + step < self.k_index.len() {
+                if let Some(bucket) = self.bucket(k_index + step) {
+                    if bucket.len() + peers.len() > K {
+                        let offset = bucket.len() + peers.len() - K;
+
+                        for peer_id in bucket.0.iter().collect::<Vec<_>>()[offset..].iter().rev() {
+                            peers.push(**peer_id);
+                        }
+
+                        break;
+                    }
+
+                    for peer_id in bucket.0.iter().rev() {
+                        peers.push(*peer_id);
+                    }
+                }
+            } else if k_index < step {
+                break;
+            }
+
+            step += 1;
+        }
+
+        Ok(peers)
+    }
+
+    fn bucket(&self, index: usize) -> Option<&KBucket<K>> {
+        self.k_index[index].map(|index| &self.k_buckets[index])
     }
 }
 
@@ -161,7 +238,7 @@ impl<const K: usize> RawKBucketTable<K> {
 /// [`peer_info`]: xstack::Switch::peer_info
 /// [`PeerId`]: xstack::identity::PeerId
 #[derive(Clone)]
-pub struct KBucketTable<const K: usize> {
+pub struct KBucketTable<const K: usize = 20> {
     /// The switch instance to which this table belongs
     switch: Switch,
     /// the size of this table,
@@ -172,23 +249,44 @@ pub struct KBucketTable<const K: usize> {
 
 impl<const K: usize> KBucketTable<K> {
     async fn insert_prv(&self, peer_id: PeerId) -> Option<PeerId> {
-        self.table.lock().await.try_insert(peer_id)
+        let r = self.table.lock().await.try_insert(peer_id);
+
+        if r.is_none() {
+            self.len.fetch_add(1, Ordering::Relaxed);
+        }
+
+        r
     }
 }
 
 impl<const K: usize> KBucketTable<K> {
-    /// Create a `k-bucket` table from `switch`
-    pub fn new(switch: Switch) -> Self {
+    /// Create a `k-bucket` table for provides `switch`
+    pub async fn bind(switch: &Switch) -> Self {
         assert!(K > 0, "the k must greater than zero");
-        Self {
+
+        // create a event source of '/xstack/event/connected'
+        let mut event_connected = EventSource::<events::Connected>::bind_with(&switch, 100).await;
+
+        let table = Self {
             len: Default::default(),
             table: Arc::new(Mutex::new(RawKBucketTable {
                 local_key: switch.local_id().into(),
                 k_buckets: Default::default(),
                 k_index: Default::default(),
             })),
-            switch,
-        }
+            switch: switch.clone(),
+        };
+
+        let table_cloned = table.clone();
+
+        // create background update task.
+        spawn_ok(async move {
+            while let Some(peer_id) = event_connected.next().await {
+                table_cloned.insert(peer_id).await;
+            }
+        });
+
+        table
     }
     /// Returns the const k value of the k-bucket.
     pub fn k_const(&self) -> usize {
@@ -222,12 +320,193 @@ impl<const K: usize> KBucketTable<K> {
     }
 
     /// Return the closest `K` peers for the input `key`.
-    pub async fn closest<Q>(&self, key: Q) -> Vec<PeerId>
+    pub async fn closest<Q>(&self, key: Q) -> Result<Vec<PeerId>>
     where
         Q: Into<KBucketKey>,
     {
         let key: KBucketKey = key.into();
 
         self.table.lock().await.closest(key)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::sync::atomic::AtomicBool;
+
+    use super::{uint::U256, *};
+
+    use libp2p_identity::PeerId;
+    use quickcheck::*;
+    use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
+    use xstack::global_switch;
+    use xstack_dnsaddr::DnsAddr;
+    use xstack_quic::QuicTransport;
+    use xstack_tcp::TcpTransport;
+
+    impl Arbitrary for KBucketKey {
+        fn arbitrary(_: &mut Gen) -> KBucketKey {
+            KBucketKey::from(PeerId::random())
+        }
+    }
+
+    #[test]
+    fn distance_symmetry() {
+        fn prop(a: KBucketKey, b: KBucketKey) -> bool {
+            a.distance(&b) == b.distance(&a)
+        }
+        quickcheck(prop as fn(_, _) -> _)
+    }
+
+    #[test]
+    fn k_distance_0() {
+        assert_eq!(KBucketDistance(U256::from(0)).k_index(), None);
+        assert_eq!(KBucketDistance(U256::from(1)).k_index(), Some(0));
+        assert_eq!(KBucketDistance(U256::from(2)).k_index(), Some(1));
+        assert_eq!(KBucketDistance(U256::from(3)).k_index(), Some(1));
+        assert_eq!(KBucketDistance(U256::from(4)).k_index(), Some(2));
+        assert_eq!(KBucketDistance(U256::from(5)).k_index(), Some(2));
+        assert_eq!(KBucketDistance(U256::from(6)).k_index(), Some(2));
+        assert_eq!(KBucketDistance(U256::from(7)).k_index(), Some(2));
+
+        let key: U256 = U256::from_dec_str(
+            "1387869471354901431189718902944276617712981560540362605030154598527111219937",
+        )
+        .unwrap();
+
+        let mut buf = [0; 32];
+
+        key.to_big_endian(&mut buf);
+
+        print!("key:");
+
+        for b in buf {
+            print!("{:08b}", b);
+        }
+
+        println!("");
+
+        let key1: U256 = U256::from_dec_str(
+            "48713671571945471088149849697865229172464319297988156458025294657724111594391",
+        )
+        .unwrap();
+
+        key1.to_big_endian(&mut buf);
+
+        print!("key1:");
+
+        for b in buf {
+            print!("{:08b}", b);
+        }
+
+        println!("");
+
+        let key2: U256 = U256::from_dec_str(
+            "46897025893666032534848063263382239944410834645063672932750903661047305087738",
+        )
+        .unwrap();
+
+        key2.to_big_endian(&mut buf);
+
+        print!("key2:");
+
+        for b in buf {
+            print!("{:08b}", b);
+        }
+
+        println!("");
+
+        let d_k1 = KBucketKey(key).distance(&KBucketKey(key1));
+
+        d_k1.0.to_big_endian(&mut buf);
+
+        print!("d_k1:");
+
+        for b in buf {
+            print!("{:08b}", b);
+        }
+
+        println!("");
+
+        println!("d_k1 lead_zeros: {:?}", d_k1.k_index());
+
+        assert_eq!(
+            KBucketKey(key).distance(&KBucketKey(key1)).k_index(),
+            KBucketKey(key).distance(&KBucketKey(key2)).k_index()
+        );
+    }
+
+    #[test]
+    fn distance_self() {
+        let key = KBucketKey::from(PeerId::random());
+
+        let distance = key.distance(&key);
+
+        assert_eq!(distance.0, U256::from(0));
+    }
+
+    async fn init() {
+        static INIT: AtomicBool = AtomicBool::new(false);
+
+        if INIT
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+            .is_ok()
+        {
+            _ = pretty_env_logger::try_init_timed();
+
+            register_mio_network();
+            register_mio_timer();
+
+            Switch::new("kad-test")
+                .transport(QuicTransport::default())
+                .transport(TcpTransport)
+                .transport(DnsAddr::new().await.unwrap())
+                .create()
+                .await
+                .unwrap()
+                .into_global();
+
+            INIT.store(false, Ordering::Release);
+        }
+
+        while INIT.load(Ordering::Acquire) {}
+    }
+
+    #[futures_test::test]
+    async fn test_table() {
+        init().await;
+
+        let k_bucket_table = KBucketTable::<20>::bind(global_switch()).await;
+
+        k_bucket_table.insert(PeerId::random()).await;
+
+        assert_eq!(k_bucket_table.len(), 1);
+
+        let closest = k_bucket_table.closest(PeerId::random()).await.unwrap();
+
+        assert_eq!(closest.len(), 1);
+
+        for _ in 1..20 {
+            k_bucket_table.insert(PeerId::random()).await;
+        }
+
+        assert_eq!(k_bucket_table.len(), 20);
+
+        let closest = k_bucket_table.closest(PeerId::random()).await.unwrap();
+
+        assert_eq!(closest.len(), 20);
+
+        loop {
+            k_bucket_table.insert(PeerId::random()).await;
+
+            if k_bucket_table.len() > 20 {
+                break;
+            }
+        }
+
+        let closest = k_bucket_table.closest(PeerId::random()).await.unwrap();
+
+        assert_eq!(closest.len(), 20);
     }
 }

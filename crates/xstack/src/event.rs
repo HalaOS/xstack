@@ -29,23 +29,6 @@ pub enum EventArgument {
     Connected(PeerId),
 }
 
-/// Event type for inbound/outbound connection to peer.
-pub struct EventConnected;
-
-impl Event for EventConnected {
-    type Argument = PeerId;
-
-    fn name() -> &'static str {
-        "/xstack/event/connected"
-    }
-
-    fn to_argument(arg: EventArgument) -> Self::Argument {
-        match arg {
-            EventArgument::Connected(peer_id) => peer_id,
-        }
-    }
-}
-
 /// A [`Stream`] of event `E`.
 pub struct EventSource<E> {
     receiver: Receiver<EventArgument>,
@@ -98,6 +81,26 @@ where
     }
 }
 
+pub mod events {
+    use super::*;
+    /// Event type for inbound/outbound connection to peer.
+    pub struct Connected;
+
+    impl Event for Connected {
+        type Argument = PeerId;
+
+        fn name() -> &'static str {
+            "/xstack/event/connected/1.0.0"
+        }
+
+        fn to_argument(arg: EventArgument) -> Self::Argument {
+            match arg {
+                EventArgument::Connected(peer_id) => peer_id,
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct EventMediator(HashMap<String, Vec<Sender<EventArgument>>>);
 
@@ -111,7 +114,7 @@ impl EventMediator {
     }
 
     async fn notify_connected(&mut self, peer_id: PeerId) {
-        if let Some(senders) = self.0.remove(EventConnected::name()) {
+        if let Some(senders) = self.0.remove(events::Connected::name()) {
             let mut valid_senders = vec![];
 
             for mut sender in senders {
@@ -126,7 +129,7 @@ impl EventMediator {
             }
 
             self.0
-                .insert(EventConnected::name().to_owned(), valid_senders);
+                .insert(events::Connected::name().to_owned(), valid_senders);
         }
     }
 

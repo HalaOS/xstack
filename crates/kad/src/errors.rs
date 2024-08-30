@@ -3,6 +3,9 @@
 pub enum Error {
     #[error(transparent)]
     XSTACK(#[from] xstack::Error),
+
+    #[error("k-bucket, call closest with local peer_id")]
+    Closest,
 }
 
 /// `Result` returns by functions in this crate.
