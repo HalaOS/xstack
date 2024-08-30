@@ -11,3 +11,6 @@ pub use errors::*;
 
 mod kbucket;
 pub use kbucket::*;
+
+mod rpc;
+pub use rpc::*;

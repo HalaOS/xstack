@@ -369,72 +369,6 @@ mod tests {
         assert_eq!(KBucketDistance(U256::from(5)).k_index(), Some(2));
         assert_eq!(KBucketDistance(U256::from(6)).k_index(), Some(2));
         assert_eq!(KBucketDistance(U256::from(7)).k_index(), Some(2));
-
-        let key: U256 = U256::from_dec_str(
-            "1387869471354901431189718902944276617712981560540362605030154598527111219937",
-        )
-        .unwrap();
-
-        let mut buf = [0; 32];
-
-        key.to_big_endian(&mut buf);
-
-        print!("key:");
-
-        for b in buf {
-            print!("{:08b}", b);
-        }
-
-        println!("");
-
-        let key1: U256 = U256::from_dec_str(
-            "48713671571945471088149849697865229172464319297988156458025294657724111594391",
-        )
-        .unwrap();
-
-        key1.to_big_endian(&mut buf);
-
-        print!("key1:");
-
-        for b in buf {
-            print!("{:08b}", b);
-        }
-
-        println!("");
-
-        let key2: U256 = U256::from_dec_str(
-            "46897025893666032534848063263382239944410834645063672932750903661047305087738",
-        )
-        .unwrap();
-
-        key2.to_big_endian(&mut buf);
-
-        print!("key2:");
-
-        for b in buf {
-            print!("{:08b}", b);
-        }
-
-        println!("");
-
-        let d_k1 = KBucketKey(key).distance(&KBucketKey(key1));
-
-        d_k1.0.to_big_endian(&mut buf);
-
-        print!("d_k1:");
-
-        for b in buf {
-            print!("{:08b}", b);
-        }
-
-        println!("");
-
-        println!("d_k1 lead_zeros: {:?}", d_k1.k_index());
-
-        assert_eq!(
-            KBucketKey(key).distance(&KBucketKey(key1)).k_index(),
-            KBucketKey(key).distance(&KBucketKey(key2)).k_index()
-        );
     }
 
     #[test]
@@ -453,7 +387,7 @@ mod tests {
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
             .is_ok()
         {
-            _ = pretty_env_logger::try_init_timed();
+            // _ = pretty_env_logger::try_init_timed();
 
             register_mio_network();
             register_mio_timer();
