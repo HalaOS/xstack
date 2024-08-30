@@ -1,17 +1,13 @@
-pub mod kbucket;
-
-pub mod store;
-
-mod key;
-pub use key::*;
+//! This is a protocol implementation of [***libp2p Kademlia DHT specification***]
+//!
+//! [***libp2p Kademlia DHT specification***]: https://github.com/libp2p/specs/tree/master/kad-dht
 
 #[doc(hidden)]
 #[allow(renamed_and_removed_lints)]
 mod proto;
 
-pub mod rpc;
+mod errors;
+pub use errors::*;
 
-pub mod errors;
-
-mod router;
-pub use router::*;
+mod kbucket;
+pub use kbucket::*;

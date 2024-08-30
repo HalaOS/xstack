@@ -2,9 +2,10 @@
 
 use std::{io::Result, pin::Pin};
 
-use futures::{stream::unfold, AsyncRead, AsyncWrite};
+use futures::{stream::unfold, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use rand::{thread_rng, RngCore};
 
-use crate::{driver_wrapper, switch::Switch};
+use crate::{driver_wrapper, switch::Switch, Error, PROTOCOL_IPFS_PING};
 
 /// A libp2p transport driver must implement the `Driver-*` traits in this module.
 ///
@@ -275,6 +276,31 @@ impl ProtocolStream {
         E: std::fmt::Debug,
     {
         switch.connect(target, protos).await
+    }
+
+    /// Send a ping request to target and check the response.
+    pub async fn ping<'a, C, E>(switch: &Switch, target: C) -> crate::Result<()>
+    where
+        C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
+        E: std::fmt::Debug,
+    {
+        let (mut stream, _) = Self::connect_with(switch, target, [PROTOCOL_IPFS_PING]).await?;
+
+        let mut buf = vec![0u8; 32];
+
+        thread_rng().fill_bytes(&mut buf);
+
+        stream.write_all(&buf).await?;
+
+        let mut echo = vec![0u8; 32];
+
+        stream.read_exact(&mut echo).await?;
+
+        if echo != buf {
+            return Err(Error::Ping);
+        }
+
+        Ok(())
     }
 }
 

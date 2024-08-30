@@ -55,6 +55,9 @@ pub enum Error {
 
     #[error("Can't find peer in the book.")]
     PeerNotFound,
+
+    #[error("Received mismatched ping response")]
+    Ping,
 }
 
 /// The result type for this module.
