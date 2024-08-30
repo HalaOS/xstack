@@ -179,3 +179,5 @@ mod global;
 
 #[cfg(feature = "global_register")]
 pub use global::*;
+
+pub mod event;

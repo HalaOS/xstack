@@ -2,7 +2,7 @@ use rasi::task::spawn_ok;
 
 use crate::{transport::ProtocolStream, Result};
 
-use super::{ListenerId, Switch, SwitchEvent};
+use super::{ListenerId, Switch, SwitchInnerEvent};
 
 /// A server-side socket that accept new inbound [`ProtocolStream`]
 pub struct ProtocolListener {
@@ -64,7 +64,7 @@ impl ProtocolListener {
             _ = self
                 .switch
                 .event_map
-                .wait(&SwitchEvent::Accept(self.id), ());
+                .wait(&SwitchInnerEvent::Accept(self.id), ());
         }
     }
 

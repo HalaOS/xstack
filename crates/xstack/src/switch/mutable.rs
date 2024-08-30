@@ -2,7 +2,11 @@ use std::collections::{HashMap, VecDeque};
 
 use multiaddr::Multiaddr;
 
-use crate::{transport::ProtocolStream, Error, Result};
+use crate::{
+    event::{Event, EventArgument, EventMediator, EventSource},
+    transport::ProtocolStream,
+    Error, Result,
+};
 
 use super::{
     pool::ConnPool, ListenerId, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING, PROTOCOL_IPFS_PUSH_ID,
@@ -14,6 +18,7 @@ pub(super) struct MutableSwitch {
     incoming_streams: HashMap<ListenerId, VecDeque<(ProtocolStream, String)>>,
     laddrs: Vec<Multiaddr>,
     protos: HashMap<String, ListenerId>,
+    event_mediator: EventMediator,
 }
 
 impl MutableSwitch {
@@ -126,5 +131,13 @@ impl MutableSwitch {
         }
 
         protos
+    }
+
+    pub(super) async fn notify(&mut self, arg: EventArgument) {
+        self.event_mediator.notify(arg).await
+    }
+
+    pub(super) fn new_listener<E: Event>(&mut self, buffer: usize) -> EventSource<E> {
+        self.event_mediator.new_listener(buffer)
     }
 }

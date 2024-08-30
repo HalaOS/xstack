@@ -21,6 +21,7 @@ use rasi::{task::spawn_ok, timer::TimeoutExt};
 
 use crate::{
     book::PeerInfo,
+    event::{Event, EventArgument, EventSource},
     keystore::KeyStore,
     proto::identity::Identity,
     transport::{ProtocolStream, TransportConnection, TransportListener},
@@ -54,7 +55,7 @@ impl ListenerId {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub(super) enum SwitchEvent {
+pub(super) enum SwitchInnerEvent {
     Accept(ListenerId),
 }
 
@@ -117,7 +118,7 @@ pub struct InnerSwitch {
     pub(super) local_peer_id: PeerId,
     pub(super) immutable: ImmutableSwitch,
     pub(super) mutable: Mutex<MutableSwitch>,
-    pub(super) event_map: KeyWaitMap<SwitchEvent, ()>,
+    pub(super) event_map: KeyWaitMap<SwitchInnerEvent, ()>,
 }
 
 impl Drop for InnerSwitch {
@@ -284,7 +285,7 @@ impl Switch {
                 let mut mutable = self.mutable.lock().await;
 
                 if let Some(id) = mutable.insert_inbound_stream(stream, protoco_id) {
-                    self.event_map.insert(SwitchEvent::Accept(id), ());
+                    self.event_map.insert(SwitchInnerEvent::Accept(id), ());
                 }
             }
         }
@@ -380,6 +381,13 @@ impl Switch {
         };
 
         self.insert_peer(peer_info).await?;
+
+        // notify event '/xstack/event/connected'
+        self.mutable
+            .lock()
+            .await
+            .notify(EventArgument::Connected(peer_id))
+            .await;
 
         Ok(())
     }
@@ -646,6 +654,14 @@ impl Switch {
 }
 
 impl Switch {
+    /// Create a new [`Event`] listener.
+    pub async fn on<E>(&self, buffer: usize) -> EventSource<E>
+    where
+        E: Event,
+    {
+        self.mutable.lock().await.new_listener(buffer)
+    }
+
     /// Remove [`PeerInfo`] from the [`PeerBook`](crate::book::PeerBook) of this switch.
     pub async fn remove_peer(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.remove(peer_id).await?)
