@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use multiaddr::Multiaddr;
 
-/// A variant for autonat state.
+/// A variant for [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AutoNAT {
     /// the node is a public node.

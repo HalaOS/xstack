@@ -232,10 +232,10 @@ impl<const K: usize> RawKBucketTable<K> {
 ///
 ///
 /// Unlike the paper description, the only data stored by this implementation is the [`PeerId`],
-/// develpers can call [`peer_info`] function to get the more data associated with the it.
+/// develpers can call [`lookup_peer_info`] function to get the more data associated with the it.
 ///
 /// [**paper**]: https://doi.org/10.1007/3-540-45748-8_5
-/// [`peer_info`]: xstack::Switch::peer_info
+/// [`lookup_peer_info`]: xstack::Switch::lookup_peer_info
 /// [`PeerId`]: xstack::identity::PeerId
 #[derive(Clone)]
 pub struct KBucketTable<const K: usize = 20> {

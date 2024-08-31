@@ -523,7 +523,7 @@ impl Switch {
         self.mutable.lock().await.local_addrs()
     }
 
-    /// Returns the autonat [`state`](AutoNAT).
+    /// Returns the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
     pub async fn auto_nat(&self) -> AutoNAT {
         self.mutable.lock().await.auto_nat()
     }
