@@ -84,11 +84,12 @@ where
     }
 }
 
+/// listenable events of `Switch`.
 pub mod events {
     use crate::AutoNAT;
 
     use super::*;
-    /// Event type for inbound/outbound connection to peer.
+    /// Peer connection event
     pub struct Connected;
 
     impl Event for Connected {
@@ -106,7 +107,7 @@ pub mod events {
         }
     }
 
-    /// Event for autonat state changed.
+    /// [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) state changed event.
     pub struct AutoNATChanged;
 
     impl Event for AutoNATChanged {

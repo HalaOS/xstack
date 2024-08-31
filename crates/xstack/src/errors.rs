@@ -50,6 +50,9 @@ pub enum Error {
     #[error("Protocol listener is not exist or is closed, '{0}'")]
     ProtocolListener(usize),
 
+    #[error("Protocol listener can't bind to {0}")]
+    ProtocolListenerBind(String),
+
     #[error("creating networking stack with null transport stack.")]
     NullTransportStack,
 

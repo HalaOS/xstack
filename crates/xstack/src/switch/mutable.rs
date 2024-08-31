@@ -58,7 +58,9 @@ impl MutableSwitch {
                 return Err(Error::BindError(proto.as_ref().to_owned()));
             }
 
-            self.protos.insert(proto.as_ref().to_owned(), id);
+            if self.protos.insert(proto.as_ref().to_owned(), id).is_some() {
+                return Err(Error::ProtocolListenerBind(proto.as_ref().to_owned()));
+            }
         }
 
         assert!(
