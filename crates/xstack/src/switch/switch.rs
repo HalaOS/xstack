@@ -161,7 +161,7 @@ impl Switch {
             let this = self.clone();
 
             spawn_ok(async move {
-                if let Err(err) = this.setup_conn(&mut conn).await {
+                if let Err(err) = this.handshake(&mut conn).await {
                     log::error!(
                         "setup connection, peer={}, local={}, err={}",
                         conn.peer_addr(),
@@ -182,8 +182,9 @@ impl Switch {
         Ok(())
     }
 
-    async fn setup_conn(&self, conn: &mut TransportConnection) -> Result<()> {
-        self.mutable.lock().await.conn_handshake(conn);
+    /// Start a background task to accept inbound stream, and make a identity request to authenticate peer.
+    async fn handshake(&self, conn: &mut TransportConnection) -> Result<()> {
+        self.mutable.lock().await.start_conn_handshake(conn);
 
         let this = self.clone();
 
@@ -465,7 +466,7 @@ impl Switch {
 
         log::trace!("{}, transport connection established", raddr);
 
-        if let Err(err) = self.setup_conn(&mut conn).await {
+        if let Err(err) = self.handshake(&mut conn).await {
             log::error!("{}, setup error: {}", raddr, err);
             _ = conn.close(self).await;
         } else {

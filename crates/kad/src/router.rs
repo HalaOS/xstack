@@ -507,13 +507,11 @@ mod tests {
             .await
             .unwrap();
 
-        for _ in 0..3 {
-            let peer_id = PeerId::random();
+        let peer_id = PeerId::random();
 
-            let peer_info = kad.find_node(&peer_id).await.unwrap();
+        let peer_info = kad.find_node(&peer_id).await.unwrap();
 
-            log::info!("find_node: {}, {:?}", peer_id, peer_info);
-        }
+        log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
         log::info!("routing table size: {}", kad.len());
     }

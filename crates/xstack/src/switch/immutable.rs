@@ -54,6 +54,7 @@ impl ImmutableSwitch {
 
 struct SwitchBuilderInner {
     laddrs: Vec<Multiaddr>,
+    early_inbound_stream_cached_size: usize,
     immutable: ImmutableSwitch,
 }
 
@@ -67,6 +68,7 @@ impl SwitchBuilder {
         Self {
             ops: Ok(SwitchBuilderInner {
                 laddrs: Default::default(),
+                early_inbound_stream_cached_size: 10,
                 immutable: ImmutableSwitch::new(agent_version),
             }),
         }
@@ -75,6 +77,17 @@ impl SwitchBuilder {
     pub fn max_conn_pool_size(self, value: usize) -> Self {
         self.and_then(|mut cfg| {
             cfg.immutable.max_conn_pool_size = value;
+
+            Ok(cfg)
+        })
+    }
+
+    /// Set the `early_inbound_stream_cached_size`, the default value is `10`.
+    ///
+    /// This parameter limits the early inbound stream cache queue size.
+    pub fn early_inbound_stream_cached_size(self, value: usize) -> Self {
+        self.and_then(|mut cfg| {
+            cfg.early_inbound_stream_cached_size = value;
 
             Ok(cfg)
         })
@@ -164,7 +177,10 @@ impl SwitchBuilder {
             inner: Arc::new(InnerSwitch {
                 local_peer_id: public_key.to_peer_id(),
                 public_key,
-                mutable: Mutex::new(MutableSwitch::new(ops.immutable.max_conn_pool_size)),
+                mutable: Mutex::new(MutableSwitch::new(
+                    ops.immutable.max_conn_pool_size,
+                    ops.early_inbound_stream_cached_size,
+                )),
                 immutable: ops.immutable,
                 event_map: KeyWaitMap::new(),
             }),

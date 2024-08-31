@@ -15,6 +15,7 @@ use super::{
 
 #[derive(Default)]
 pub(super) struct MutableSwitch {
+    early_inbound_stream_cached_size: usize,
     conn_pool: ConnPool,
     inbound_streams: HashMap<ListenerId, VecDeque<(ProtocolStream, String)>>,
     laddrs: Vec<Multiaddr>,
@@ -24,8 +25,9 @@ pub(super) struct MutableSwitch {
 }
 
 impl MutableSwitch {
-    pub(super) fn new(max_pool_size: usize) -> Self {
+    pub(super) fn new(max_pool_size: usize, early_inbound_stream_cached_size: usize) -> Self {
         Self {
+            early_inbound_stream_cached_size,
             conn_pool: ConnPool::new(max_pool_size),
             ..Default::default()
         }
@@ -126,7 +128,7 @@ impl MutableSwitch {
         }
     }
 
-    pub(super) fn conn_handshake(&mut self, conn: &TransportConnection) {
+    pub(super) fn start_conn_handshake(&mut self, conn: &TransportConnection) {
         self.unauth_inbound_streams
             .insert(conn.id().to_owned(), vec![]);
     }
@@ -152,6 +154,15 @@ impl MutableSwitch {
     /// the protocol listener does not exist or has been closed, it is simply dropped.
     pub(super) fn insert_unauth_inbound_stream(&mut self, stream: ProtocolStream, proto: String) {
         if let Some(streams) = self.unauth_inbound_streams.get_mut(stream.conn_id()) {
+            if streams.len() > self.early_inbound_stream_cached_size {
+                log::warn!(
+                    "early inbound stream limits reached, conn={}, stream={}",
+                    stream.conn_id(),
+                    stream.id()
+                );
+                return;
+            }
+
             streams.push((stream, proto));
         } else {
             self.unauth_inbound_streams
