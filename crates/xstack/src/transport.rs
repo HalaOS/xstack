@@ -169,6 +169,8 @@ pub mod transport_syscall {
     /// instance created by [`accept`](DriverConnection::accept) or [`connect`](DriverConnection::connect)
     /// functions.
     pub trait DriverStream: Sync + Send + Unpin {
+        /// Get the conn id.
+        fn conn_id(&self) -> &str;
         /// Get the stream's uuid.
         fn id(&self) -> &str;
         /// Return the remote peer's public key.

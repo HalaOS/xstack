@@ -280,6 +280,7 @@ impl DriverConnection for P2pTcpConn {
         let stream = self.conn.stream_accept().await?;
 
         Ok(P2pTcpStream::new(
+            self.id.clone(),
             stream,
             self.public_key.clone(),
             self.laddr.clone(),
@@ -293,6 +294,7 @@ impl DriverConnection for P2pTcpConn {
         let stream = self.conn.stream_open().await?;
 
         Ok(P2pTcpStream::new(
+            self.id.clone(),
             stream,
             self.public_key.clone(),
             self.laddr.clone(),
@@ -329,6 +331,7 @@ impl DriverConnection for P2pTcpConn {
 }
 
 struct P2pTcpStream {
+    conn_id: String,
     id: String,
     stream: YamuxStream,
     public_key: PublicKey,
@@ -345,6 +348,7 @@ impl Drop for P2pTcpStream {
 
 impl P2pTcpStream {
     fn new(
+        conn_id: String,
         stream: YamuxStream,
         public_key: PublicKey,
         laddr: Multiaddr,
@@ -354,6 +358,7 @@ impl P2pTcpStream {
         counter.fetch_add(1, Ordering::Relaxed);
 
         Self {
+            conn_id,
             counter,
             id: Uuid::new_v4().to_string(),
             stream,
@@ -366,6 +371,9 @@ impl P2pTcpStream {
 
 #[async_trait]
 impl DriverStream for P2pTcpStream {
+    fn conn_id(&self) -> &str {
+        &self.conn_id
+    }
     fn id(&self) -> &str {
         &self.id
     }

@@ -2,7 +2,7 @@ use std::{
     fmt::Debug,
     ops::Deref,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc,
     },
     time::SystemTime,
@@ -175,8 +175,6 @@ impl Switch {
                         conn.peer_addr(),
                         conn.local_addr()
                     );
-
-                    this.mutable.lock().await.conn_pool.put(conn);
                 }
             })
         }
@@ -185,19 +183,14 @@ impl Switch {
     }
 
     async fn setup_conn(&self, conn: &mut TransportConnection) -> Result<()> {
-        let authenticated = Arc::new(AtomicBool::default());
+        self.mutable.lock().await.conn_handshake(conn);
 
         let this = self.clone();
 
         let mut this_conn = conn.clone();
 
-        let authenticated_cloned = authenticated.clone();
-
         spawn_ok(async move {
-            if let Err(err) = this
-                .incoming_stream_loop(&mut this_conn, authenticated_cloned)
-                .await
-            {
+            if let Err(err) = this.incoming_stream_loop(&mut this_conn).await {
                 log::error!(
                     "incoming stream loop stopped, peer={}, local={}, error={}",
                     this_conn.peer_addr(),
@@ -215,7 +208,7 @@ impl Switch {
         });
 
         // start "/ipfs/id/1.0.0" handshake.
-        self.identity_request(conn, authenticated)
+        self.identity_request(conn)
             .timeout(self.immutable.timeout)
             .await
             .ok_or(Error::Timeout)??;
@@ -223,30 +216,19 @@ impl Switch {
         Ok(())
     }
 
-    async fn incoming_stream_loop(
-        &self,
-        conn: &mut TransportConnection,
-        authenticated: Arc<AtomicBool>,
-    ) -> Result<()> {
+    async fn incoming_stream_loop(&self, conn: &mut TransportConnection) -> Result<()> {
         loop {
             let stream = conn.accept().await?;
 
             let id = stream.id().to_owned();
 
-            if let Err(err) = self
-                .handle_incoming_stream(stream, authenticated.clone())
-                .await
-            {
+            if let Err(err) = self.handle_incoming_stream(stream).await {
                 log::trace!("dispatch stream, id={}, err={}", id, err);
             }
         }
     }
 
-    async fn handle_incoming_stream(
-        &self,
-        mut stream: ProtocolStream,
-        authenticated: Arc<AtomicBool>,
-    ) -> Result<()> {
+    async fn handle_incoming_stream(&self, mut stream: ProtocolStream) -> Result<()> {
         log::info!(
             "accept new stream, peer={}, local={}, id={}",
             stream.peer_addr(),
@@ -276,10 +258,7 @@ impl Switch {
             let local_addr = stream.local_addr().clone();
             let id = stream.id().to_owned();
 
-            if let Err(err) = this
-                .dispatch_stream(protoco_id, stream, authenticated)
-                .await
-            {
+            if let Err(err) = this.dispatch_stream(protoco_id, stream).await {
                 log::error!(
                     "dispatch stream, id={}, peer={}, local={}, err={}",
                     id,
@@ -300,31 +279,16 @@ impl Switch {
         Ok(())
     }
 
-    async fn dispatch_stream(
-        &self,
-        protoco_id: String,
-        stream: ProtocolStream,
-        authenticated: Arc<AtomicBool>,
-    ) -> Result<()> {
+    async fn dispatch_stream(&self, protoco_id: String, stream: ProtocolStream) -> Result<()> {
         let conn_peer_id = stream.public_key().to_peer_id();
 
         match protoco_id.as_str() {
             PROTOCOL_IPFS_ID => self.identity_response(stream).await?,
             PROTOCOL_IPFS_PUSH_ID => {
                 self.identity_push(&conn_peer_id, stream).await?;
-                authenticated.store(true, Ordering::Release);
             }
             PROTOCOL_IPFS_PING => self.ping_echo(stream).await?,
             _ => {
-                if !authenticated.load(Ordering::Acquire) {
-                    log::error!(
-                        "drop unauthenticated stream={}, protocol={}",
-                        stream.id(),
-                        protoco_id
-                    );
-                    return Ok(());
-                }
-
                 let mut mutable = self.mutable.lock().await;
 
                 if let Some(id) = mutable.insert_inbound_stream(stream, protoco_id) {
@@ -398,6 +362,7 @@ impl Switch {
                 conn_peer_id,
                 peer_id
             );
+
             return Err(Error::AuthenticateFailed);
         }
 
@@ -426,32 +391,31 @@ impl Switch {
         self.insert_peer(peer_info).await?;
 
         // notify event '/xstack/event/connected'
-        self.mutable
-            .lock()
-            .await
-            .notify(EventArgument::Connected(peer_id))
-            .await;
+        let mut mutable = self.mutable.lock().await;
+
+        mutable.notify(EventArgument::Connected(peer_id)).await;
 
         Ok(())
     }
 
     /// Start a "/ipfs/id/1.0.0" handshake.
-    async fn identity_request(
-        &self,
-        conn: &mut TransportConnection,
-        authenticated: Arc<AtomicBool>,
-    ) -> Result<()> {
+    async fn identity_request(&self, conn: &mut TransportConnection) -> Result<()> {
         let mut stream = conn.connect().await?;
 
         let conn_peer_id = conn.public_key().to_peer_id();
 
         dialer_select_proto(&mut stream, ["/ipfs/id/1.0.0"], Version::V1).await?;
 
-        self.identity_push(&conn_peer_id, stream).await?;
-
-        authenticated.store(true, Ordering::Release);
-
-        Ok(())
+        match self.identity_push(&conn_peer_id, stream).await {
+            Ok(_) => {
+                self.mutable.lock().await.conn_handshake_succ(conn.clone());
+                return Ok(());
+            }
+            Err(err) => {
+                self.mutable.lock().await.conn_handshake_failed(conn);
+                return Err(err);
+            }
+        }
     }
 
     async fn identity_response(&self, mut stream: ProtocolStream) -> Result<()> {
@@ -503,6 +467,7 @@ impl Switch {
 
         if let Err(err) = self.setup_conn(&mut conn).await {
             log::error!("{}, setup error: {}", raddr, err);
+            _ = conn.close(self).await;
         } else {
             if let Some(multiaddr::Protocol::P2p(id)) = raddr.clone().pop() {
                 let conn_peer_id = conn.public_key().to_peer_id();
@@ -518,7 +483,6 @@ impl Switch {
             }
 
             log::trace!("{}, setup success", raddr);
-            self.mutable.lock().await.conn_pool.put(conn.clone());
         }
 
         Ok(conn)
@@ -531,7 +495,7 @@ impl Switch {
     async fn transport_connect_to(&self, id: &PeerId) -> Result<TransportConnection> {
         log::trace!("{}, connect", id);
 
-        if let Some(conns) = self.mutable.lock().await.conn_pool.get(id) {
+        if let Some(conns) = self.mutable.lock().await.get_conn(id) {
             if !conns.is_empty() {
                 log::trace!("{}, reused connection in local pool.", id);
                 let conn = conns.into_iter().choose(&mut thread_rng()).unwrap();
@@ -574,7 +538,7 @@ impl Switch {
     }
 
     pub(crate) async fn remove_conn(&self, conn: &TransportConnection) {
-        self.mutable.lock().await.conn_pool.remove(conn);
+        self.mutable.lock().await.remove_conn(conn);
 
         let peer_id = conn.public_key().to_peer_id();
 

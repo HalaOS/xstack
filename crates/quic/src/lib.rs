@@ -97,7 +97,7 @@ pub struct QuicTransport(pub Duration);
 
 impl Default for QuicTransport {
     fn default() -> Self {
-        Self(Duration::from_secs(2))
+        Self(Duration::from_secs(5))
     }
 }
 
@@ -261,6 +261,7 @@ impl DriverConnection for QuicP2pConn {
         let stream = self.conn.accept().await?;
 
         Ok(QuicP2pStream::new(
+            self.id.clone(),
             stream,
             self.public_key.clone(),
             self.laddr.clone(),
@@ -274,6 +275,7 @@ impl DriverConnection for QuicP2pConn {
         let stream = self.conn.open(true).await?;
 
         Ok(QuicP2pStream::new(
+            self.id.clone(),
             stream,
             self.public_key.clone(),
             self.laddr.clone(),
@@ -312,6 +314,7 @@ impl DriverConnection for QuicP2pConn {
 }
 
 struct QuicP2pStream {
+    conn_id: String,
     id: String,
     stream: QuicStream,
     public_key: PublicKey,
@@ -328,6 +331,7 @@ impl Drop for QuicP2pStream {
 
 impl QuicP2pStream {
     fn new(
+        conn_id: String,
         stream: QuicStream,
         public_key: PublicKey,
         laddr: Multiaddr,
@@ -337,6 +341,7 @@ impl QuicP2pStream {
         counter.fetch_add(1, Ordering::Relaxed);
 
         Self {
+            conn_id,
             counter,
             id: format!("quic({:?},{})", stream.scid(), stream.id()),
             stream,
@@ -349,6 +354,9 @@ impl QuicP2pStream {
 
 #[async_trait]
 impl DriverStream for QuicP2pStream {
+    fn conn_id(&self) -> &str {
+        &self.conn_id
+    }
     fn id(&self) -> &str {
         &self.id
     }

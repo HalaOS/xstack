@@ -1,11 +1,12 @@
 use std::collections::{HashMap, VecDeque};
 
+use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 
 use crate::{
     event::{Event, EventArgument, EventMediator, EventSource},
     transport::ProtocolStream,
-    Error, Result,
+    Error, Result, TransportConnection,
 };
 
 use super::{
@@ -14,11 +15,12 @@ use super::{
 
 #[derive(Default)]
 pub(super) struct MutableSwitch {
-    pub(super) conn_pool: ConnPool,
-    incoming_streams: HashMap<ListenerId, VecDeque<(ProtocolStream, String)>>,
+    conn_pool: ConnPool,
+    inbound_streams: HashMap<ListenerId, VecDeque<(ProtocolStream, String)>>,
     laddrs: Vec<Multiaddr>,
     protos: HashMap<String, ListenerId>,
     event_mediator: EventMediator,
+    unauth_inbound_streams: HashMap<String, Vec<(ProtocolStream, String)>>,
 }
 
 impl MutableSwitch {
@@ -56,7 +58,7 @@ impl MutableSwitch {
         }
 
         assert!(
-            self.incoming_streams
+            self.inbound_streams
                 .insert(id, VecDeque::default())
                 .is_none(),
             "The `ListenerId` cannot be duplicated."
@@ -83,7 +85,7 @@ impl MutableSwitch {
             self.protos.remove(&key);
         }
 
-        self.incoming_streams.remove(id);
+        self.inbound_streams.remove(id);
     }
 
     /// Pop one inbound stream from one listener's incoming queue.
@@ -92,7 +94,7 @@ impl MutableSwitch {
         id: &ListenerId,
     ) -> Result<Option<(ProtocolStream, String)>> {
         Ok(self
-            .incoming_streams
+            .inbound_streams
             .get_mut(id)
             .ok_or(Error::ProtocolListener(id.into()))?
             .pop_front())
@@ -106,8 +108,13 @@ impl MutableSwitch {
         stream: ProtocolStream,
         proto: String,
     ) -> Option<ListenerId> {
+        if self.unauth_inbound_streams.contains_key(stream.conn_id()) {
+            self.insert_unauth_inbound_stream(stream, proto);
+            return None;
+        }
+
         if let Some(id) = self.protos.get(&proto) {
-            self.incoming_streams
+            self.inbound_streams
                 .get_mut(id)
                 .expect("Atomic cleanup listener resources guarantee")
                 .push_back((stream, proto));
@@ -116,6 +123,39 @@ impl MutableSwitch {
         } else {
             log::warn!("Protocol listener is not exists, {}", proto);
             None
+        }
+    }
+
+    pub(super) fn conn_handshake(&mut self, conn: &TransportConnection) {
+        self.unauth_inbound_streams
+            .insert(conn.id().to_owned(), vec![]);
+    }
+
+    pub(super) fn conn_handshake_failed(&mut self, conn: &TransportConnection) {
+        self.unauth_inbound_streams.remove(conn.id());
+        self.unauth_inbound_streams
+            .insert(conn.id().to_owned(), vec![]);
+    }
+
+    /// Put a new connecton instance into the pool, and update indexers.
+    pub(super) fn conn_handshake_succ(&mut self, conn: TransportConnection) {
+        if let Some(streams) = self.unauth_inbound_streams.remove(conn.id()) {
+            for (stream, proto) in streams {
+                self.insert_inbound_stream(stream, proto);
+            }
+        }
+
+        self.conn_pool.put(conn)
+    }
+    /// Insert a new inbound stream from an unauthenticated connection.
+    ///
+    /// the protocol listener does not exist or has been closed, it is simply dropped.
+    pub(super) fn insert_unauth_inbound_stream(&mut self, stream: ProtocolStream, proto: String) {
+        if let Some(streams) = self.unauth_inbound_streams.get_mut(stream.conn_id()) {
+            streams.push((stream, proto));
+        } else {
+            self.unauth_inbound_streams
+                .insert(stream.conn_id().to_owned(), vec![(stream, proto)]);
         }
     }
 
@@ -139,5 +179,14 @@ impl MutableSwitch {
 
     pub(super) fn new_listener<E: Event>(&mut self, buffer: usize) -> EventSource<E> {
         self.event_mediator.new_listener(buffer)
+    }
+
+    pub(super) fn get_conn(&self, peer_id: &PeerId) -> Option<Vec<TransportConnection>> {
+        self.conn_pool.get(peer_id)
+    }
+
+    pub(super) fn remove_conn(&mut self, conn: &TransportConnection) {
+        self.unauth_inbound_streams.remove(conn.id());
+        self.conn_pool.remove(conn)
     }
 }

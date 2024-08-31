@@ -21,7 +21,7 @@ impl ConnPool {
             ..Default::default()
         }
     }
-    pub(super) fn conn_pool_gc(&mut self) {
+    fn conn_pool_gc(&mut self) {
         log::trace!("conn_pool_gc, size={}", self.conns.len());
 
         if self.conns.len() < self.max_pool_size {
