@@ -1,3 +1,4 @@
+/// Create a Wrapper type for Driver-* traits.
 #[macro_export]
 macro_rules! driver_wrapper {
     ([$doc:expr]$ident:ident[$driver: path]) => {

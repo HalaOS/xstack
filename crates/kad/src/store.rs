@@ -9,6 +9,10 @@ use xstack::driver_wrapper;
 use crate::KBucketKey;
 
 /// A record store must implement the `Driver-*` traits in this module.
+///
+/// A `KadStore` is the kademlia's key/value pair storage service,
+/// developers can call [`set_store`](crate::KademliaOptions::set_store)
+/// to set the customise implementation, the default implementation used by `KademliaRouter` is the [`KadMemoryStore`](crate::KadMemoryStore).
 pub mod syscall {
     use async_trait::async_trait;
 

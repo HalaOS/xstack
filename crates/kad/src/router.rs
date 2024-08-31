@@ -40,7 +40,7 @@ pub trait RoutingAlogrithm {
     ) -> impl Future<Output = std::io::Result<Routing>> + Send + 'static;
 }
 
-/// The context data of recursive routing algorithms.
+/// The context data for recursive routing algorithms.
 pub struct Recursively<'a> {
     label: Option<&'a str>,
     /// The search key.
@@ -233,7 +233,7 @@ impl<'a> Recursively<'a> {
     }
 }
 
-/// The configuration for creating [`Router`] instance.
+/// The configuration for creating [`KademliaRouter`] instance.
 #[derive(Clone)]
 pub struct KademliaOptions {
     switch: Switch,
@@ -617,5 +617,29 @@ mod tests {
             .unwrap();
 
         assert_eq!(provider_peers, vec![peer_info]);
+    }
+
+    #[futures_test::test]
+    async fn get_provider() {
+        init().await;
+
+        let (stream, _) =  ProtocolStream::connect(
+                "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+                [PROTOCOL_IPFS_KAD, PROTOCOL_IPFS_LAN_KAD],
+            )
+            .await
+            .unwrap();
+
+        let cid = bs58::decode("QmdmQXB2mzChmMeKY47C43LxUdg1NDJ5MWcKMKxDu7RgQm")
+            .into_vec()
+            .unwrap();
+
+        let GetProviders {
+            closer_peers,
+            provider_peers,
+        } = stream.kad_get_providers(cid, 1024 * 1024).await.unwrap();
+
+        log::trace!("{:?}", closer_peers);
+        log::trace!("{:?}", provider_peers);
     }
 }
