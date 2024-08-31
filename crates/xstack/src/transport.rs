@@ -262,6 +262,15 @@ impl ProtocolStream {
     {
         Self::connect_with(crate::global_switch(), target, protos).await
     }
+
+    /// Send a ping request to target and check the response.
+    pub async fn ping<'a, C, E>(target: C) -> crate::Result<()>
+    where
+        C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
+        E: std::fmt::Debug,
+    {
+        Self::ping_with(crate::global_switch(), target).await
+    }
 }
 
 impl ProtocolStream {
@@ -281,7 +290,7 @@ impl ProtocolStream {
     }
 
     /// Send a ping request to target and check the response.
-    pub async fn ping<'a, C, E>(switch: &Switch, target: C) -> crate::Result<()>
+    pub async fn ping_with<'a, C, E>(switch: &Switch, target: C) -> crate::Result<()>
     where
         C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
         E: std::fmt::Debug,

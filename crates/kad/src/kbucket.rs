@@ -309,7 +309,7 @@ impl<const K: usize> KBucketTable<K> {
 
             spawn_ok(async move {
                 // ping the lru to decide what to do.
-                if let Err(err) = ProtocolStream::ping(&this.switch, &lru).await {
+                if let Err(err) = ProtocolStream::ping_with(&this.switch, &lru).await {
                     log::trace!("ping lru node, {}", err);
                     this.insert_prv(lru.clone()).await;
                 } else {

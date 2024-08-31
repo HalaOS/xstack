@@ -412,7 +412,7 @@ impl Switch {
     pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
         log::trace!("{}, try establish transport connection", raddr);
 
-        if let Some(peer_id) = self.listen_on(raddr).await? {
+        if let Some(peer_id) = self.lookup_peer_id(raddr).await? {
             log::trace!(
                 "{}, found peer_id in local book, peer_id={}",
                 raddr,
@@ -508,22 +508,22 @@ impl Switch {
     }
 
     /// Remove [`PeerInfo`] from the [`PeerBook`](crate::book::PeerBook) of this switch.
-    pub async fn remove_peer(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
+    pub async fn remove_peer_info(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.remove(peer_id).await?)
     }
 
     /// insert new [`PeerInfo`] into the [`PeerBook`](crate::PeerBook) of this `Switch`
-    pub async fn insert_peer(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>> {
+    pub async fn insert_peer_info(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.insert(peer_info).await?)
     }
 
     /// Returns the [`PeerInfo`] of the [`peer_id`](PeerId).
-    pub async fn peer_info(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
+    pub async fn lookup_peer_info(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.get(peer_id).await?)
     }
 
     /// Reverse lookup [`PeerId`] for the peer indicated by the listening address.
-    pub async fn listen_on(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
+    pub async fn lookup_peer_id(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
         Ok(self.immutable.peer_book.listen_on(raddr).await?)
     }
 

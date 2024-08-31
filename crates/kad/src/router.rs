@@ -332,7 +332,7 @@ impl KademliaOptions {
                 ..Default::default()
             };
 
-            self.switch.insert_peer(peer_info).await?;
+            self.switch.insert_peer_info(peer_info).await?;
         }
 
         Ok(KademliaRouter {
@@ -385,7 +385,7 @@ impl KademliaRouter {
         .route(&find_node)
         .await?;
 
-        Ok(self.ops.switch.peer_info(peer_id).await?)
+        Ok(self.ops.switch.lookup_peer_info(peer_id).await?)
     }
 
     /// Returns the routing_table length.
@@ -439,7 +439,7 @@ impl<'a> RoutingAlogrithm for FindNode<'a> {
                 }
 
                 candidates.push(peer_info.id);
-                switch.insert_peer(peer_info).await?;
+                switch.insert_peer_info(peer_info).await?;
             }
 
             if finished {
@@ -528,7 +528,7 @@ mod tests {
             .unwrap();
 
         let peer_id =
-            PeerId::from_str("12D3KooWSjq866wCng8N8X89FnakDt3RAgmYxSK6W46DNZRZrHeu").unwrap();
+            PeerId::from_str("12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB").unwrap();
 
         let peer_info = kad.find_node(&peer_id).await.unwrap();
 
@@ -641,5 +641,14 @@ mod tests {
 
         log::trace!("{:?}", closer_peers);
         log::trace!("{:?}", provider_peers);
+    }
+
+    #[futures_test::test]
+    async fn test_ping() {
+        init().await;
+
+        ProtocolStream::ping("/ip4/107.173.86.71/udp/4001/quic/p2p/12D3KooWGDrZPTx1LrGevpVj1Djn9dni9cDJRYSe9MtMLHmwJQNz")
+            .await
+            .unwrap();
     }
 }

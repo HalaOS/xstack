@@ -13,6 +13,8 @@ pub struct PeerInfo {
     pub id: PeerId,
     /// peer listening addresses.
     pub addrs: Vec<Multiaddr>,
+    /// The list of peer support protocols.
+    pub protos: Vec<String>,
     /// The timestamp of when the peer latest connected.
     /// `Switch` sets this field after a handshake via the ‘/ipfs/id/1.0.0’ protocol.
     pub appear: Option<SystemTime>,
@@ -28,6 +30,7 @@ impl Default for PeerInfo {
             addrs: Default::default(),
             appear: Default::default(),
             disappear: Default::default(),
+            protos: Default::default(),
         }
     }
 }

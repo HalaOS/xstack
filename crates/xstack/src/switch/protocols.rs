@@ -22,6 +22,9 @@ pub const PROTOCOL_IPFS_PUSH_ID: &str = "/ipfs/id/push/1.0.0";
 /// protocol name of libp2p ping
 pub const PROTOCOL_IPFS_PING: &str = "/ipfs/ping/1.0.0";
 
+/// String of AutoNAT Protocol
+pub const PROTOCOL_LIBP2P_AUTONAT: &str = "/libp2p/autonat/1.0.0";
+
 impl Switch {
     /// Handle `/ipfs/ping/1.0.0` request.
     pub(super) async fn ping_echo(&self, mut stream: ProtocolStream) -> Result<()> {
@@ -108,14 +111,17 @@ impl Switch {
         //TODO: add nat codes
         log::info!("{} observed addrs: {:?}", peer_id, observed_addrs);
 
+        log::info!("{} protos: {:?}", peer_id, identity.protocols);
+
         let peer_info = PeerInfo {
             id: peer_id,
             addrs: raddrs,
+            protos: identity.protocols,
             appear: Some(SystemTime::now()),
             ..Default::default()
         };
 
-        self.insert_peer(peer_info).await?;
+        self.insert_peer_info(peer_info).await?;
 
         // notify event '/xstack/event/connected'
         let mut mutable = self.mutable.lock().await;
