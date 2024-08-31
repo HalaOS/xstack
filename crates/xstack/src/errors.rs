@@ -17,8 +17,8 @@ pub enum Error {
     #[error(transparent)]
     UnsignedVarint(#[from] unsigned_varint::io::ReadError),
 
-    #[error("Received identity length > {0}")]
-    IdentityOverflow(usize),
+    #[error("The receiving packet length is overflow: {0}")]
+    Overflow(usize),
 
     #[error(transparent)]
     ProtobufError(#[from] protobuf::Error),
@@ -58,6 +58,9 @@ pub enum Error {
 
     #[error("Received mismatched ping response")]
     Ping,
+
+    #[error("Invalid autonat response packet received")]
+    AutoNatResponse,
 }
 
 /// The result type for this module.

@@ -8,7 +8,7 @@ use futures::{
 };
 use libp2p_identity::PeerId;
 
-use crate::Switch;
+use crate::{AutoNAT, Switch};
 
 /// A trait which switch event type must implement.
 pub trait Event {
@@ -27,6 +27,9 @@ pub trait Event {
 pub enum EventArgument {
     /// A inbound/outbound connection is established.
     Connected(PeerId),
+
+    /// autonat state changed.
+    AutoNAT(AutoNAT),
 }
 
 /// A [`Stream`] of event `E`.
@@ -82,6 +85,8 @@ where
 }
 
 pub mod events {
+    use crate::AutoNAT;
+
     use super::*;
     /// Event type for inbound/outbound connection to peer.
     pub struct Connected;
@@ -96,6 +101,25 @@ pub mod events {
         fn to_argument(arg: EventArgument) -> Self::Argument {
             match arg {
                 EventArgument::Connected(peer_id) => peer_id,
+                _ => panic!("not here"),
+            }
+        }
+    }
+
+    /// Event for autonat state changed.
+    pub struct AutoNATChanged;
+
+    impl Event for AutoNATChanged {
+        type Argument = AutoNAT;
+
+        fn name() -> &'static str {
+            "/xstack/event/autonat/1.0.0"
+        }
+
+        fn to_argument(arg: EventArgument) -> Self::Argument {
+            match arg {
+                EventArgument::AutoNAT(auto_nat) => auto_nat,
+                _ => panic!("not here"),
             }
         }
     }
@@ -105,20 +129,24 @@ pub mod events {
 pub(crate) struct EventMediator(HashMap<String, Vec<Sender<EventArgument>>>);
 
 impl EventMediator {
-    pub(crate) async fn notify(&mut self, arg: EventArgument) {
-        match arg {
-            EventArgument::Connected(peer_id) => {
-                self.notify_connected(peer_id).await;
+    pub(crate) fn notify(&mut self, arg: EventArgument) {
+        match &arg {
+            EventArgument::Connected(_) => {
+                self.notify_inner::<events::Connected>(arg);
             }
+            EventArgument::AutoNAT(_) => self.notify_inner::<events::AutoNATChanged>(arg),
         }
     }
 
-    async fn notify_connected(&mut self, peer_id: PeerId) {
-        if let Some(senders) = self.0.remove(events::Connected::name()) {
+    fn notify_inner<E>(&mut self, arg: EventArgument)
+    where
+        E: Event,
+    {
+        if let Some(senders) = self.0.remove(E::name()) {
             let mut valid_senders = vec![];
 
             for mut sender in senders {
-                if let Err(err) = sender.try_send(EventArgument::Connected(peer_id.clone())) {
+                if let Err(err) = sender.try_send(arg.clone()) {
                     if err.is_disconnected() {
                         log::trace!("remove closed connected event listener");
                         continue;

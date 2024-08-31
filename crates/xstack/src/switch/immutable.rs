@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use futures::lock::Mutex;
 use futures_map::KeyWaitMap;
 use multiaddr::Multiaddr;
+use rasi::task::spawn_ok;
 
 use crate::{
     book::{peerbook_syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
@@ -11,7 +12,7 @@ use crate::{
     Error, Result,
 };
 
-use super::{mutable::MutableSwitch, InnerSwitch, Switch};
+use super::{mutable::MutableSwitch, Switch};
 
 /// immutable context data for one switch.
 pub(super) struct ImmutableSwitch {
@@ -22,8 +23,8 @@ pub(super) struct ImmutableSwitch {
     /// This is a free-form string, identitying the implementation of the peer. The usual format is agent-name/version,
     /// where agent-name is the name of the program or library and version is its semantic version.
     pub(super) agent_version: String,
-    /// The max length of identity packet.
-    pub(super) max_identity_packet_size: usize,
+    /// Maximun length of libp2p rpc packets.
+    pub(super) max_packet_size: usize,
     /// A list of transport that this switch registered.
     pub(super) transports: Vec<Transport>,
     /// Keystore registered to this switch.
@@ -38,7 +39,7 @@ impl ImmutableSwitch {
             max_conn_pool_size: 20,
             agent_version,
             timeout: Duration::from_secs(10),
-            max_identity_packet_size: 4096,
+            max_packet_size: 4096,
             transports: vec![],
             keystore: MemoryKeyStore::random().into(),
             peer_book: MemoryPeerBook::default().into(),
@@ -129,7 +130,7 @@ impl SwitchBuilder {
     /// Set the receive max buffer length of identity protocol.
     pub fn max_identity_packet_size(self, value: usize) -> Self {
         self.and_then(|mut cfg| {
-            cfg.immutable.max_identity_packet_size = value;
+            cfg.immutable.max_packet_size = value;
 
             Ok(cfg)
         })
@@ -174,21 +175,21 @@ impl SwitchBuilder {
         let public_key = ops.immutable.keystore.public_key().await?;
 
         let switch = Switch {
-            inner: Arc::new(InnerSwitch {
-                local_peer_id: public_key.to_peer_id(),
-                public_key,
-                mutable: Mutex::new(MutableSwitch::new(
-                    ops.immutable.max_conn_pool_size,
-                    ops.early_inbound_stream_cached_size,
-                )),
-                immutable: ops.immutable,
-                event_map: KeyWaitMap::new(),
-            }),
+            local_peer_id: Arc::new(public_key.to_peer_id()),
+            public_key: Arc::new(public_key),
+            mutable: Arc::new(Mutex::new(MutableSwitch::new(
+                ops.immutable.max_conn_pool_size,
+                ops.early_inbound_stream_cached_size,
+            ))),
+            immutable: Arc::new(ops.immutable),
+            event_map: Arc::new(KeyWaitMap::new()),
         };
 
         for laddr in ops.laddrs {
             switch.transport_bind(&laddr).await?;
         }
+
+        spawn_ok(switch.clone().auto_nat_client());
 
         Ok(switch)
     }

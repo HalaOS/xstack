@@ -513,7 +513,11 @@ mod tests {
 
         log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
-        log::info!("routing table size: {}", kad.len());
+        log::info!(
+            "kad({}), autonat({:?})",
+            kad.len(),
+            global_switch().auto_nat().await
+        );
     }
 
     #[futures_test::test]

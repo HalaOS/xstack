@@ -1,6 +1,5 @@
 use std::{
     fmt::Debug,
-    ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -8,7 +7,7 @@ use std::{
     time::SystemTime,
 };
 
-use super::{immutable::ImmutableSwitch, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
+use super::{immutable::ImmutableSwitch, AutoNAT, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
 use futures::{lock::Mutex, TryStreamExt};
 use futures_map::KeyWaitMap;
@@ -102,21 +101,6 @@ impl TryFrom<&str> for ConnectTo<'static> {
     }
 }
 
-#[doc(hidden)]
-pub struct InnerSwitch {
-    pub(super) public_key: PublicKey,
-    pub(super) local_peer_id: PeerId,
-    pub(super) immutable: ImmutableSwitch,
-    pub(super) mutable: Mutex<MutableSwitch>,
-    pub(super) event_map: KeyWaitMap<SwitchInnerEvent, ()>,
-}
-
-impl Drop for InnerSwitch {
-    fn drop(&mut self) {
-        log::trace!("Switch dropping.");
-    }
-}
-
 /// `Switch` is the entry point of the libp2p network.
 ///
 /// via `Switch` instance, you can:
@@ -126,16 +110,21 @@ impl Drop for InnerSwitch {
 /// # Multiaddr hit
 #[derive(Clone)]
 pub struct Switch {
-    pub(super) inner: Arc<InnerSwitch>,
+    // pub(super) inner: Arc<InnerSwitch>,
+    pub(super) public_key: Arc<PublicKey>,
+    pub(super) local_peer_id: Arc<PeerId>,
+    pub(super) immutable: Arc<ImmutableSwitch>,
+    pub(super) mutable: Arc<Mutex<MutableSwitch>>,
+    pub(super) event_map: Arc<KeyWaitMap<SwitchInnerEvent, ()>>,
 }
 
-impl Deref for Switch {
-    type Target = InnerSwitch;
+// impl Deref for Switch {
+//     type Target = InnerSwitch;
 
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
 
 impl Switch {
     async fn handle_incoming(&self, listener: TransportListener) -> Result<()> {
@@ -307,19 +296,6 @@ impl Switch {
             log::error!("{}, setup error: {}", raddr, err);
             _ = conn.close(self).await;
         } else {
-            if let Some(multiaddr::Protocol::P2p(id)) = raddr.clone().pop() {
-                let conn_peer_id = conn.public_key().to_peer_id();
-                if conn_peer_id != id {
-                    log::error!(
-                        "connec to={} peer_id mismatch, expect={}, got={}",
-                        raddr,
-                        id,
-                        conn_peer_id
-                    );
-                    return Err(Error::AuthenticateFailed);
-                }
-            }
-
             log::trace!("{}, setup success", raddr);
         }
 
@@ -534,17 +510,22 @@ impl Switch {
 
     /// Get this switch's public key.
     pub fn local_public_key(&self) -> &PublicKey {
-        &self.inner.public_key
+        &self.public_key
     }
 
     /// Get this switch's node id.
     pub fn local_id(&self) -> &PeerId {
-        &self.inner.local_peer_id
+        &self.local_peer_id
     }
 
     /// Returns the addresses list of this switch is bound to.
     pub async fn local_addrs(&self) -> Vec<Multiaddr> {
         self.mutable.lock().await.local_addrs()
+    }
+
+    /// Returns the autonat [`state`](AutoNAT).
+    pub async fn auto_nat(&self) -> AutoNAT {
+        self.mutable.lock().await.auto_nat()
     }
 
     /// Register self into global context.
