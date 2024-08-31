@@ -421,7 +421,6 @@ mod tests {
 
     #[futures_test::test]
     async fn test_specs() {
-        // pretty_env_logger::init();
         transport_specs(QuicMock).await.unwrap();
     }
 }

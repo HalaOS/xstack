@@ -152,16 +152,29 @@ impl Switch {
         let mut incoming = listener.into_incoming();
 
         while let Some(mut conn) = incoming.try_next().await? {
-            log::trace!(target:"switch","accept a new incoming connection, peer={}, local={}", conn.peer_addr(),conn.local_addr());
+            log::trace!(
+                "accept a new incoming connection, peer={}, local={}",
+                conn.peer_addr(),
+                conn.local_addr()
+            );
 
             let this = self.clone();
 
             spawn_ok(async move {
                 if let Err(err) = this.setup_conn(&mut conn).await {
-                    log::error!(target:"switch","setup connection, peer={}, local={}, err={}", conn.peer_addr(),conn.local_addr(),err);
+                    log::error!(
+                        "setup connection, peer={}, local={}, err={}",
+                        conn.peer_addr(),
+                        conn.local_addr(),
+                        err
+                    );
                     _ = conn.close(&this).await;
                 } else {
-                    log::trace!(target:"switch","setup connection, peer={}, local={}", conn.peer_addr(),conn.local_addr());
+                    log::trace!(
+                        "setup connection, peer={}, local={}",
+                        conn.peer_addr(),
+                        conn.local_addr()
+                    );
 
                     this.mutable.lock().await.conn_pool.put(conn);
                 }
@@ -185,10 +198,19 @@ impl Switch {
                 .incoming_stream_loop(&mut this_conn, authenticated_cloned)
                 .await
             {
-                log::error!(target:"switch","incoming stream loop stopped, peer={}, local={}, error={}",this_conn.peer_addr(),this_conn.local_addr(),err);
+                log::error!(
+                    "incoming stream loop stopped, peer={}, local={}, error={}",
+                    this_conn.peer_addr(),
+                    this_conn.local_addr(),
+                    err
+                );
                 _ = this_conn.close(&this).await;
             } else {
-                log::info!(target:"switch","incoming stream loop stopped, peer={}, local={}",this_conn.peer_addr(),this_conn.local_addr());
+                log::info!(
+                    "incoming stream loop stopped, peer={}, local={}",
+                    this_conn.peer_addr(),
+                    this_conn.local_addr()
+                );
             }
         });
 
@@ -215,7 +237,7 @@ impl Switch {
                 .handle_incoming_stream(stream, authenticated.clone())
                 .await
             {
-                log::error!(target:"switch","dispatch stream, id={}, err={}", id, err);
+                log::trace!("dispatch stream, id={}, err={}", id, err);
             }
         }
     }
@@ -225,7 +247,12 @@ impl Switch {
         mut stream: ProtocolStream,
         authenticated: Arc<AtomicBool>,
     ) -> Result<()> {
-        log::info!(target:"switch","accept new stream, peer={}, local={}, id={}",stream.peer_addr(),stream.local_addr(),stream.id());
+        log::info!(
+            "accept new stream, peer={}, local={}, id={}",
+            stream.peer_addr(),
+            stream.local_addr(),
+            stream.id()
+        );
 
         let protos = self.mutable.lock().await.protos();
 
@@ -234,7 +261,12 @@ impl Switch {
             .await
             .ok_or(Error::Timeout)??;
 
-        log::info!(target:"switch","protocol handshake, id={}, protocol={}, peer_id={}",stream.id(),protoco_id, stream.public_key().to_peer_id());
+        log::trace!(
+            "protocol handshake, id={}, protocol={}, peer_id={}",
+            stream.id(),
+            protoco_id,
+            stream.public_key().to_peer_id()
+        );
 
         let this = self.clone();
         let protoco_id = protoco_id.clone();
@@ -248,9 +280,20 @@ impl Switch {
                 .dispatch_stream(protoco_id, stream, authenticated)
                 .await
             {
-                log::error!(target:"switch","dispatch stream, id={}, peer={}, local={}, err={}",id, peer_addr,local_addr,err);
+                log::error!(
+                    "dispatch stream, id={}, peer={}, local={}, err={}",
+                    id,
+                    peer_addr,
+                    local_addr,
+                    err
+                );
             } else {
-                log::trace!(target:"switch","dispatch stream ok, id={}, peer={}, local={}",id, peer_addr, local_addr);
+                log::trace!(
+                    "dispatch stream ok, id={}, peer={}, local={}",
+                    id,
+                    peer_addr,
+                    local_addr
+                );
             }
         });
 
@@ -274,7 +317,7 @@ impl Switch {
             PROTOCOL_IPFS_PING => self.ping_echo(stream).await?,
             _ => {
                 if !authenticated.load(Ordering::Acquire) {
-                    log::warn!(
+                    log::error!(
                         "drop unauthenticated stream={}, protocol={}",
                         stream.id(),
                         protoco_id
@@ -371,7 +414,7 @@ impl Switch {
             .collect::<Result<Vec<_>>>()?;
 
         //TODO: add nat codes
-        log::info!(target:"switch","{} observed addrs: {:?}", peer_id, observed_addrs);
+        log::info!("{} observed addrs: {:?}", peer_id, observed_addrs);
 
         let peer_info = PeerInfo {
             id: peer_id,

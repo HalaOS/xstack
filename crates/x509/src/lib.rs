@@ -368,8 +368,6 @@ where
 
     let pub_key = cert.tbs_certificate.subject_public_key_info.to_der()?;
 
-    println!("verify_rsa_pss_signature: {}", D::OID);
-
     let verify_key =
         rsa::pss::VerifyingKey::<D>::new(rsa::RsaPublicKey::from_public_key_der(&pub_key)?);
 

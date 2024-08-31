@@ -1,5 +1,5 @@
 use libp2p_identity::ParseError;
-use xstack::multiaddr;
+use xstack::multiaddr::{self, Multiaddr};
 
 /// The error type of this crate.
 #[derive(Debug, thiserror::Error)]
@@ -30,7 +30,25 @@ pub enum Error {
 
     #[error("request/response packet length is out of range.")]
     OutOfRange(usize),
+
+    #[error("{0}")]
+    Other(String),
+
+    #[error("Muliaddr is not end with p2p protocol, {0}")]
+    WithoutP2p(Multiaddr),
+
+    #[error("Kademlia rpc timeout")]
+    Timeout,
 }
 
 /// `Result` returns by functions in this crate.
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<Error> for std::io::Error {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::IoError(err) => err,
+            err => std::io::Error::new(std::io::ErrorKind::Other, err),
+        }
+    }
+}

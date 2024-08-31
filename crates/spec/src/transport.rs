@@ -52,7 +52,8 @@ async fn stream_ping_pong(cx: &dyn TransportSpecContext) -> Result<()> {
     });
 
     for raddr in peer_addrs {
-        for _ in 0..100 {
+        for i in 0..100 {
+            println!("{}", i);
             let (mut stream, _) = client.connect(&raddr, TRANSPORT_SPEC_PROTOS).await?;
 
             stream.write_all(b"hello libp2p").await.unwrap();
