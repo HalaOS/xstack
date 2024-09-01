@@ -19,3 +19,5 @@ Refers to the [`rustdoc`](https://docs.rs/xstack) for technical details.
 | Tcp         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-tcp/0.2.15)](https://docs.rs/xstack-tcp/latest)        | transport | stable      |
 | dnsaddr     | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-dnsaddr/0.2.15)](https://docs.rs/xstack-dnsaddr/latest)| transport | available   |
 | Kad         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-kad/0.2.15)](https://docs.rs/xstack-kad/latest)        | protocol  | in progress |
+| autonat         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-autonat/0.2.15)](https://docs.rs/xstack-autonat/latest)        | protocol  | only client |
+| circuit-v2         | [![docs.rs (with version)](https://img.shields.io/docsrs/xstack-circuit/0.2.15)](https://docs.rs/xstack-circuit/latest)        | protocol  | in progress |

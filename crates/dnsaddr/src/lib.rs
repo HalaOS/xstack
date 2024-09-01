@@ -118,7 +118,7 @@ impl DriverTransport for DnsAddr {
         let mut last_error = None;
 
         for raddr in raddrs {
-            match switch.transport_connect(&raddr).await {
+            match switch.transport_connect(&raddr, false).await {
                 Ok(conn) => return Ok(conn),
                 Err(err) => last_error = Some(err),
             }

@@ -45,6 +45,10 @@ impl MutableSwitch {
         self.laddrs.clone()
     }
 
+    pub(super) fn set_local_addrs(&mut self, addrs: Vec<Multiaddr>) {
+        self.laddrs = addrs;
+    }
+
     /// Create a new server-side socket that accept inbound protocol stream.
     pub(super) fn new_protocol_listener<I>(&mut self, protos: I) -> Result<ListenerId>
     where
@@ -144,14 +148,14 @@ impl MutableSwitch {
     }
 
     /// Put a new connecton instance into the pool, and update indexers.
-    pub(super) fn conn_handshake_succ(&mut self, conn: TransportConnection) {
+    pub(super) fn conn_handshake_succ(&mut self, conn: TransportConnection, pin: bool) {
         if let Some(streams) = self.unauth_inbound_streams.remove(conn.id()) {
             for (stream, proto) in streams {
                 self.insert_inbound_stream(stream, proto);
             }
         }
 
-        self.conn_pool.put(conn)
+        self.conn_pool.put(conn, pin)
     }
     /// Insert a new inbound stream from an unauthenticated connection.
     ///

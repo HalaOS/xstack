@@ -1,9 +1,9 @@
 [package]
-description = "The autonat protocol implementation for xstack."
-documentation = "https://docs.rs/xstack-autonat"
+description = "The Circuit Relay v2 implementation for xstack."
+documentation = "https://docs.rs/xstack-circuit"
 edition.workspace = true
 license = "MIT"
-name = "xstack-autonat"
+name = "xstack-circuit"
 repository = "https://github.com/HalaOS/xstack.git"
 version.workspace = true
 
@@ -18,12 +18,3 @@ unsigned-varint = { workspace = true, features = ["futures"] }
 [build-dependencies]
 protobuf-codegen = { workspace = true }
 protoc-bin-vendored = { workspace = true }
-
-[dev-dependencies]
-futures-test = { workspace = true }
-rasi-mio = { workspace = true }
-pretty_env_logger = { workspace = true }
-
-[features]
-default = ["global_register"]
-global_register = ["xstack/global_register"]

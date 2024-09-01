@@ -9,7 +9,7 @@ use crate::{multiaddr::ToSockAddr, transport::TransportConnection};
 pub(super) struct ConnPool {
     max_pool_size: usize,
     /// mapping id => connection.
-    conns: HashMap<String, TransportConnection>,
+    conns: HashMap<String, (TransportConnection, bool)>,
     /// mapping peer_id to conn id.
     peers: HashMap<PeerId, Vec<String>>,
 }
@@ -30,8 +30,8 @@ impl ConnPool {
 
         let mut removed = vec![];
 
-        for (_, conn) in &self.conns {
-            if conn.actives() == 0 {
+        for (_, (conn, pin)) in &self.conns {
+            if conn.actives() == 0 && !pin {
                 removed.push(conn.clone());
             }
         }
@@ -48,7 +48,7 @@ impl ConnPool {
     }
 
     /// Put a new connecton instance into the pool, and update indexers.
-    pub(super) fn put(&mut self, conn: TransportConnection) {
+    pub(super) fn put(&mut self, conn: TransportConnection, pin: bool) {
         self.conn_pool_gc();
 
         let peer_id = conn.public_key().to_peer_id();
@@ -61,7 +61,7 @@ impl ConnPool {
         let id = conn.id().to_owned();
 
         // consistency test.
-        if let Some(conn) = self.conns.get(&id) {
+        if let Some((conn, _)) = self.conns.get(&id) {
             let o_peer_id = conn.public_key().to_peer_id();
 
             let o_raddr = conn
@@ -77,7 +77,7 @@ impl ConnPool {
 
         log::info!(target: "Switch","add new conn, id={}, raddr={}, peer={}",id , raddr, peer_id);
 
-        self.conns.insert(id.to_owned(), conn);
+        self.conns.insert(id.to_owned(), (conn, pin));
 
         if let Some(conn_ids) = self.peers.get_mut(&peer_id) {
             conn_ids.push(id);
@@ -91,7 +91,7 @@ impl ConnPool {
             Some(
                 conn_ids
                     .iter()
-                    .map(|id| self.conns.get(id).expect("consistency guarantee").clone())
+                    .map(|id| self.conns.get(id).expect("consistency guarantee").0.clone())
                     .collect(),
             )
         } else {
@@ -109,7 +109,7 @@ impl ConnPool {
 
         let id = conn.id().to_owned();
 
-        if let Some(conn) = self.conns.remove(&id) {
+        if let Some((conn, _)) = self.conns.remove(&id) {
             let o_peer_id = conn.public_key().to_peer_id();
 
             let o_raddr = conn

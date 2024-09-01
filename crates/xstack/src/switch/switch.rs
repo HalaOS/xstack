@@ -140,7 +140,7 @@ impl Switch {
             let this = self.clone();
 
             spawn_ok(async move {
-                if let Err(err) = this.handshake(&mut conn).await {
+                if let Err(err) = this.handshake(&mut conn, false).await {
                     log::error!(
                         "setup connection, peer={}, local={}, err={}",
                         conn.peer_addr(),
@@ -162,7 +162,7 @@ impl Switch {
     }
 
     /// Start a background task to accept inbound stream, and make a identity request to authenticate peer.
-    async fn handshake(&self, conn: &mut TransportConnection) -> Result<()> {
+    async fn handshake(&self, conn: &mut TransportConnection, pin: bool) -> Result<()> {
         self.mutable.lock().await.start_conn_handshake(conn);
 
         let this = self.clone();
@@ -188,7 +188,7 @@ impl Switch {
         });
 
         // start "/ipfs/id/1.0.0" handshake.
-        self.identity_request(conn)
+        self.identity_request(conn, pin)
             .timeout(self.immutable.timeout)
             .await
             .ok_or(Error::Timeout)??;
@@ -280,7 +280,11 @@ impl Switch {
         Ok(())
     }
 
-    async fn transport_connect_prv(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
+    async fn transport_connect_prv(
+        &self,
+        raddr: &Multiaddr,
+        pin: bool,
+    ) -> Result<TransportConnection> {
         let transport = self
             .immutable
             .get_transport_by_address(raddr)
@@ -292,7 +296,7 @@ impl Switch {
 
         log::trace!("{}, transport connection established", raddr);
 
-        if let Err(err) = self.handshake(&mut conn).await {
+        if let Err(err) = self.handshake(&mut conn, pin).await {
             log::error!("{}, setup error: {}", raddr, err);
             _ = conn.close(self).await;
         } else {
@@ -306,7 +310,7 @@ impl Switch {
     ///
     /// This function will first check for a local connection cache,
     /// and if there is one, it will directly return the cached connection
-    async fn transport_connect_to(&self, id: &PeerId) -> Result<TransportConnection> {
+    async fn transport_connect_to(&self, id: &PeerId, pin: bool) -> Result<TransportConnection> {
         log::trace!("{}, connect", id);
 
         if let Some(conns) = self.mutable.lock().await.get_conn(id) {
@@ -334,7 +338,7 @@ impl Switch {
 
             log::trace!("connect to {}", raddr);
 
-            match self.transport_connect_prv(&raddr).await {
+            match self.transport_connect_prv(&raddr, pin).await {
                 Ok(conn) => {
                     log::trace!("{}, connect to {}, established", id, raddr);
                     return Ok(conn);
@@ -369,40 +373,9 @@ impl Switch {
             );
         }
     }
-}
-
-impl Switch {
-    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
-    pub fn new<A>(agent_version: A) -> SwitchBuilder
-    where
-        A: AsRef<str>,
-    {
-        SwitchBuilder::new(agent_version.as_ref().to_owned())
-    }
-
-    /// Connect to peer with provided [`raddr`](Multiaddr).
-    ///
-    /// This function first query the route table to get the peer id,
-    /// if exists then check for a local connection cache.
-    ///
-    pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
-        log::trace!("{}, try establish transport connection", raddr);
-
-        if let Some(peer_id) = self.lookup_peer_id(raddr).await? {
-            log::trace!(
-                "{}, found peer_id in local book, peer_id={}",
-                raddr,
-                peer_id
-            );
-
-            return self.transport_connect_to(&peer_id).await;
-        }
-
-        self.transport_connect_prv(raddr).await
-    }
 
     /// Create a new transport layer socket that accepts peer's inbound connections.
-    pub async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
+    pub(super) async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
         let transport = self
             .immutable
             .get_transport_by_address(laddr)
@@ -425,6 +398,42 @@ impl Switch {
         });
 
         Ok(())
+    }
+}
+
+impl Switch {
+    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
+    pub fn new<A>(agent_version: A) -> SwitchBuilder
+    where
+        A: AsRef<str>,
+    {
+        SwitchBuilder::new(agent_version.as_ref().to_owned())
+    }
+
+    /// Connect to peer with provided [`raddr`](Multiaddr).
+    ///
+    /// This function first query the route table to get the peer id,
+    /// if exists then check for a local connection cache.
+    ///
+    /// if the parameter pin is true, the `Switch` will not drop the created connection when the connection pool is doing garbage collect
+    pub async fn transport_connect(
+        &self,
+        raddr: &Multiaddr,
+        pin: bool,
+    ) -> Result<TransportConnection> {
+        log::trace!("{}, try establish transport connection", raddr);
+
+        if let Some(peer_id) = self.lookup_peer_id(raddr).await? {
+            log::trace!(
+                "{}, found peer_id in local book, peer_id={}",
+                raddr,
+                peer_id
+            );
+
+            return self.transport_connect_to(&peer_id, pin).await;
+        }
+
+        self.transport_connect_prv(raddr, pin).await
     }
 
     /// Create a protocol layer server-side socket, that accept inbound [`ProtocolStream`].
@@ -454,10 +463,10 @@ impl Switch {
             .try_into()
             .map_err(|err| Error::Other(format!("{:?}", err)))?
         {
-            ConnectTo::PeerIdRef(peer_id) => self.transport_connect_to(peer_id).await?,
-            ConnectTo::MultiaddrRef(raddr) => self.transport_connect(raddr).await?,
-            ConnectTo::PeerId(peer_id) => self.transport_connect_to(&peer_id).await?,
-            ConnectTo::Multiaddr(raddr) => self.transport_connect(&raddr).await?,
+            ConnectTo::PeerIdRef(peer_id) => self.transport_connect_to(peer_id, false).await?,
+            ConnectTo::MultiaddrRef(raddr) => self.transport_connect(raddr, false).await?,
+            ConnectTo::PeerId(peer_id) => self.transport_connect_to(&peer_id, false).await?,
+            ConnectTo::Multiaddr(raddr) => self.transport_connect(&raddr, false).await?,
         };
 
         log::trace!("open stream, conn_id={}", conn.id());
@@ -521,6 +530,14 @@ impl Switch {
     /// Returns the addresses list of this switch is bound to.
     pub async fn local_addrs(&self) -> Vec<Multiaddr> {
         self.mutable.lock().await.local_addrs()
+    }
+
+    /// Update the list of local_addrs. normally, protocols such as [`circuit`] call this function
+    /// to change listening addresses to circuit protocol addresses.
+    ///
+    /// [`circuit`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md
+    pub async fn set_local_addrs(&self, addrs: Vec<Multiaddr>) {
+        self.mutable.lock().await.set_local_addrs(addrs);
     }
 
     /// Returns the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
