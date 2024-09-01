@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 mod client;
 mod proto;
 pub use client::*;
