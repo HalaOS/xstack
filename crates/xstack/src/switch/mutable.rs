@@ -20,6 +20,7 @@ pub(super) struct MutableSwitch {
     conn_pool: ConnPool,
     inbound_streams: HashMap<ListenerId, VecDeque<(ProtocolStream, String)>>,
     laddrs: Vec<Multiaddr>,
+    nat_addrs: Vec<Multiaddr>,
     protos: HashMap<String, ListenerId>,
     event_mediator: EventMediator,
     unauth_inbound_streams: HashMap<String, Vec<(ProtocolStream, String)>>,
@@ -45,8 +46,16 @@ impl MutableSwitch {
         self.laddrs.clone()
     }
 
-    pub(super) fn set_local_addrs(&mut self, addrs: Vec<Multiaddr>) {
-        self.laddrs = addrs;
+    pub(super) fn listen_addrs(&self) -> Vec<Multiaddr> {
+        if self.nat == AutoNAT::Nat {
+            self.nat_addrs.clone()
+        } else {
+            self.laddrs.clone()
+        }
+    }
+
+    pub(super) fn set_net_addrs(&mut self, addrs: Vec<Multiaddr>) {
+        self.nat_addrs = addrs;
     }
 
     /// Create a new server-side socket that accept inbound protocol stream.

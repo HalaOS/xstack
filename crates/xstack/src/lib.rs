@@ -182,3 +182,6 @@ pub use global::*;
 
 mod event;
 pub use event::*;
+
+mod rpc;
+pub use rpc::*;

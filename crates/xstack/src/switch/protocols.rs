@@ -167,7 +167,7 @@ impl Switch {
         identity.set_agentVersion(self.immutable.agent_version.to_owned());
 
         identity.listenAddrs = self
-            .local_addrs()
+            .listen_addrs()
             .await
             .iter()
             .map(|addr| addr.to_vec())

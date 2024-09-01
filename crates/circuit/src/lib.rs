@@ -4,8 +4,11 @@
 
 mod proto;
 
-mod hop;
-mod stop;
+mod rpc;
+pub use rpc::*;
 
-pub use hop::*;
-pub use stop::*;
+mod transport;
+pub use transport::*;
+
+mod errors;
+pub use errors::*;

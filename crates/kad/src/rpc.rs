@@ -1,9 +1,9 @@
 use std::future::Future;
 
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncWrite};
 use libp2p_identity::PeerId;
-use protobuf::{Message, MessageField};
-use xstack::{multiaddr::Multiaddr, PeerInfo};
+use protobuf::MessageField;
+use xstack::{multiaddr::Multiaddr, PeerInfo, XStackRpc};
 
 use crate::{
     proto::{
@@ -31,66 +31,6 @@ pub struct GetValue {
 
 /// An extension trait that add `Kademlia` RPC calls to [`AsyncWrite`] + [`AsyncRead`]
 pub trait KademliaRpc: AsyncWrite + AsyncRead + Unpin {
-    /// Send a kad request and wait for response.
-    fn kad_rpc_call(
-        mut self,
-        message: &rpc::Message,
-        max_recv_len: usize,
-    ) -> impl Future<Output = Result<rpc::Message>>
-    where
-        Self: Sized,
-    {
-        async move {
-            let buf = message.write_to_bytes()?;
-
-            let mut payload_len = unsigned_varint::encode::usize_buffer();
-
-            self.write_all(unsigned_varint::encode::usize(buf.len(), &mut payload_len))
-                .await?;
-
-            self.write_all(buf.as_slice()).await?;
-
-            log::trace!("KAD_RPC_CALL, tx length={}", buf.len());
-
-            let body_len = unsigned_varint::aio::read_usize(&mut self).await?;
-
-            log::trace!("KAD_RPC_CALL, rx length={}", body_len);
-
-            if body_len > max_recv_len {
-                return Err(Error::OutOfRange(max_recv_len));
-            }
-
-            let mut buf = vec![0u8; body_len];
-
-            self.read_exact(&mut buf).await?;
-
-            let message = rpc::Message::parse_from_bytes(&buf)?;
-
-            Ok(message)
-        }
-    }
-
-    /// Send a kad message.
-    fn kad_rpc_send(mut self, message: &rpc::Message) -> impl Future<Output = Result<()>>
-    where
-        Self: Sized,
-    {
-        async move {
-            let buf = message.write_to_bytes()?;
-
-            let mut payload_len = unsigned_varint::encode::usize_buffer();
-
-            self.write_all(unsigned_varint::encode::usize(buf.len(), &mut payload_len))
-                .await?;
-
-            self.write_all(buf.as_slice()).await?;
-
-            log::trace!("KAD_RPC_SEND, tx length={}", buf.len());
-
-            Ok(())
-        }
-    }
-
     /// Send a kad `FIND_NODE` request and wait for response.
     fn kad_find_node<K>(
         self,
@@ -107,7 +47,7 @@ pub trait KademliaRpc: AsyncWrite + AsyncRead + Unpin {
         message.key = key.as_ref().to_vec();
 
         async move {
-            let message = self.kad_rpc_call(&message, max_recv_len).await?;
+            let message = self.xstack_call(&message, max_recv_len).await?;
 
             let mut peers = vec![];
 
@@ -153,7 +93,7 @@ pub trait KademliaRpc: AsyncWrite + AsyncRead + Unpin {
         message.record = MessageField::some(record);
 
         async move {
-            let resp = self.kad_rpc_call(&message, max_recv_len).await?;
+            let resp = self.xstack_call(&message, max_recv_len).await?;
 
             if message.key != resp.key {
                 return Err(Error::RpcType);
@@ -179,7 +119,7 @@ pub trait KademliaRpc: AsyncWrite + AsyncRead + Unpin {
         message.key = key.as_ref().to_vec();
 
         async move {
-            let resp = self.kad_rpc_call(&message, max_recv_len).await?;
+            let resp = self.xstack_call(&message, max_recv_len).await?;
 
             let closer_peers = resp
                 .closerPeers
@@ -213,7 +153,7 @@ pub trait KademliaRpc: AsyncWrite + AsyncRead + Unpin {
         message.providerPeers = vec![peer_info.into()];
 
         async move {
-            self.kad_rpc_send(&message).await?;
+            self.xstack_send(&message).await?;
 
             Ok(())
         }
@@ -235,7 +175,7 @@ pub trait KademliaRpc: AsyncWrite + AsyncRead + Unpin {
         message.key = key.as_ref().to_vec();
 
         async move {
-            let resp = self.kad_rpc_call(&message, max_recv_len).await?;
+            let resp = self.xstack_call(&message, max_recv_len).await?;
 
             let closer_peers = resp
                 .closerPeers

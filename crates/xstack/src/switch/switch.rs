@@ -373,9 +373,22 @@ impl Switch {
             );
         }
     }
+}
+
+impl Switch {
+    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
+    pub fn new<A>(agent_version: A) -> SwitchBuilder
+    where
+        A: AsRef<str>,
+    {
+        SwitchBuilder::new(agent_version.as_ref().to_owned())
+    }
 
     /// Create a new transport layer socket that accepts peer's inbound connections.
-    pub(super) async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
+    ///
+    /// protocols such as [`circuit`] call this function to dynamic launch sub-protocol
+    /// '/libp2p/circuit/relay/0.2.0/stop'.
+    pub async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
         let transport = self
             .immutable
             .get_transport_by_address(laddr)
@@ -398,16 +411,6 @@ impl Switch {
         });
 
         Ok(())
-    }
-}
-
-impl Switch {
-    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
-    pub fn new<A>(agent_version: A) -> SwitchBuilder
-    where
-        A: AsRef<str>,
-    {
-        SwitchBuilder::new(agent_version.as_ref().to_owned())
     }
 
     /// Connect to peer with provided [`raddr`](Multiaddr).
@@ -532,12 +535,19 @@ impl Switch {
         self.mutable.lock().await.local_addrs()
     }
 
-    /// Update the list of local_addrs. normally, protocols such as [`circuit`] call this function
+    /// Returns the addresses list of this switch is listen to.
+    ///
+    /// Unlike the [`local_addrs`](Self::local_addrs) function, this function may returns circuit-v2 addresses.
+    pub async fn listen_addrs(&self) -> Vec<Multiaddr> {
+        self.mutable.lock().await.listen_addrs()
+    }
+
+    /// Sets the list of listening addresses for the [`circuit-v2/stop`] protocol.
     /// to change listening addresses to circuit protocol addresses.
     ///
-    /// [`circuit`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md
-    pub async fn set_local_addrs(&self, addrs: Vec<Multiaddr>) {
-        self.mutable.lock().await.set_local_addrs(addrs);
+    /// [`circuit-v2/stop`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#stop-protocol
+    pub async fn set_nat_addrs(&self, addrs: Vec<Multiaddr>) {
+        self.mutable.lock().await.set_net_addrs(addrs);
     }
 
     /// Returns the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).

@@ -11,6 +11,7 @@ version.workspace = true
 xstack = { workspace = true }
 log = { workspace = true }
 futures = { workspace = true }
+thiserror = { workspace = true }
 rasi = { workspace = true }
 protobuf = { workspace = true }
 unsigned-varint = { workspace = true, features = ["futures"] }
