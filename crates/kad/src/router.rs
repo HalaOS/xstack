@@ -4,7 +4,6 @@ use std::{
     future::Future,
     num::NonZeroUsize,
     sync::Arc,
-    time::Duration,
 };
 
 use futures::{channel::mpsc::channel, SinkExt, StreamExt};
@@ -237,10 +236,6 @@ impl<'a> Recursively<'a> {
 #[derive(Clone)]
 pub struct KademliaOptions {
     switch: Switch,
-    /// The timeout wait for rpc calls.
-    rpc_timeout: Duration,
-    /// The maximum kad protocol packet size received from peer.
-    max_packet_size: usize,
     /// The kad record store.
     store: Arc<KadStore>,
     /// the maximum concurrency tasks that this route process can starts.
@@ -251,8 +246,6 @@ impl KademliaOptions {
     fn new(switch: Switch) -> Self {
         Self {
             switch,
-            rpc_timeout: Duration::from_secs(10),
-            max_packet_size: 1024 * 1024 * 4,
             store: Arc::new(KadMemoryStore::new().into()),
             concurrency: NonZeroUsize::new(20).unwrap(),
         }
@@ -274,18 +267,6 @@ impl KademliaOptions {
         S: DriverKadStore + 'static,
     {
         self.store = Arc::new(value.into());
-        self
-    }
-
-    /// Set the timeout wait for rpc calls, the default value is `10s`.
-    pub fn set_rpc_timeout(mut self, value: Duration) -> Self {
-        self.rpc_timeout = value;
-        self
-    }
-
-    /// Set the maximum packet size received from peer, the default value is `1024 * 1024 * 4` bytes.
-    pub fn set_max_packet_size(mut self, value: usize) -> Self {
-        self.max_packet_size = value;
         self
     }
 
@@ -360,8 +341,8 @@ impl KademliaRouter {
     }
 
     /// Use provides `Switch` to create a new `KademliaRouter` instance.
-    pub fn with(switch: Switch) -> KademliaOptions {
-        KademliaOptions::new(switch)
+    pub fn with(switch: &Switch) -> KademliaOptions {
+        KademliaOptions::new(switch.clone())
     }
 
     /// Try get the routing path by [`PeerId`].
@@ -408,8 +389,8 @@ impl<'a> RoutingAlogrithm for FindNode<'a> {
         let peer_id = peer_id.clone();
         let switch = self.router.ops.switch.clone();
         let target = self.target.clone();
-        let max_packet_size = self.router.ops.max_packet_size;
-        let timeout = self.router.ops.rpc_timeout;
+        let max_packet_size = switch.max_packet_size();
+        let timeout = switch.timeout();
         // let kbucket = self.router.kbucket.clone();
 
         async move {
@@ -453,14 +434,12 @@ impl<'a> RoutingAlogrithm for FindNode<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        str::FromStr,
-        sync::atomic::{AtomicBool, Ordering},
-    };
+    use std::{str::FromStr, sync::Once};
 
     use libp2p_identity::Keypair;
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
     use xstack::{global_switch, ProtocolStream, Switch};
+    use xstack_autonat::AutoNatClient;
     use xstack_dnsaddr::DnsAddr;
     use xstack_quic::QuicTransport;
     use xstack_tcp::TcpTransport;
@@ -469,43 +448,37 @@ mod tests {
 
     use super::*;
 
-    async fn init() {
-        static INIT: AtomicBool = AtomicBool::new(false);
+    async fn init() -> Switch {
+        static INIT: Once = Once::new();
 
-        if INIT
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
-            .is_ok()
-        {
+        INIT.call_once(|| {
             _ = pretty_env_logger::try_init_timed();
 
             register_mio_network();
             register_mio_timer();
+        });
 
-            Switch::new("kad-test")
-                .transport(QuicTransport::default())
-                .transport(TcpTransport)
-                .transport(DnsAddr::new().await.unwrap())
-                .create()
-                .await
-                .unwrap()
-                .into_global();
-
-            INIT.store(false, Ordering::Release);
-        }
-
-        while INIT.load(Ordering::Acquire) {}
+        Switch::new("kad-test")
+            .transport(QuicTransport::default())
+            .transport(TcpTransport)
+            .transport(DnsAddr::new().await.unwrap())
+            .create()
+            .await
+            .unwrap()
     }
 
     #[futures_test::test]
     async fn find_node() {
-        init().await;
+        let switch = init().await;
 
-        let kad = KademliaRouter::new()
+        let kad = KademliaRouter::with(&switch)
             .with_seeds([
                 "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
             ])
             .await
             .unwrap();
+
+        AutoNatClient::bind_with(&switch);
 
         let peer_id = PeerId::random();
 
@@ -513,18 +486,14 @@ mod tests {
 
         log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
-        log::info!(
-            "kad({}), autonat({:?})",
-            kad.len(),
-            global_switch().auto_nat().await
-        );
+        log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
     }
 
     #[futures_test::test]
     async fn find_node_1() {
-        init().await;
+        let switch = init().await;
 
-        let kad = KademliaRouter::new()
+        let kad = KademliaRouter::with(&switch)
             .with_seeds([
                 "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
             ])
@@ -541,10 +510,11 @@ mod tests {
 
     #[futures_test::test]
     async fn put_value() {
-        init().await;
+        let switch = init().await;
 
         let (stream, _) = ProtocolStream::
-            connect(
+            connect_with(
+                &switch,
                  "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
                 [PROTOCOL_IPFS_KAD, PROTOCOL_IPFS_LAN_KAD],
             )
@@ -566,7 +536,8 @@ mod tests {
             .unwrap();
 
         let (stream, _) =  ProtocolStream::
-            connect(
+            connect_with(
+                 &switch,
                  "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
                 [PROTOCOL_IPFS_KAD, PROTOCOL_IPFS_LAN_KAD],
             )
@@ -583,9 +554,10 @@ mod tests {
 
     #[futures_test::test]
     async fn add_provider() {
-        init().await;
+        let switch = init().await;
 
-        let (stream, _) =  ProtocolStream::connect(
+        let (stream, _) =  ProtocolStream::connect_with(
+            &switch,
                 "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
                 [PROTOCOL_IPFS_KAD, PROTOCOL_IPFS_LAN_KAD],
             )
@@ -605,7 +577,8 @@ mod tests {
             .await
             .unwrap();
 
-        let (stream, _) = ProtocolStream::connect(
+        let (stream, _) = ProtocolStream::connect_with(
+            &switch,
             "QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
             [PROTOCOL_IPFS_KAD, PROTOCOL_IPFS_LAN_KAD],
         )
@@ -625,9 +598,10 @@ mod tests {
 
     #[futures_test::test]
     async fn get_provider() {
-        init().await;
+        let switch = init().await;
 
-        let (stream, _) =  ProtocolStream::connect(
+        let (stream, _) =  ProtocolStream::connect_with(
+            &switch,
                 "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
                 [PROTOCOL_IPFS_KAD, PROTOCOL_IPFS_LAN_KAD],
             )
@@ -649,9 +623,9 @@ mod tests {
 
     #[futures_test::test]
     async fn test_ping() {
-        init().await;
+        let switch = init().await;
 
-        ProtocolStream::ping("/ip4/107.173.86.71/udp/4001/quic/p2p/12D3KooWGDrZPTx1LrGevpVj1Djn9dni9cDJRYSe9MtMLHmwJQNz")
+        ProtocolStream::ping_with(&switch,"/ip4/107.173.86.71/udp/4001/quic/p2p/12D3KooWGDrZPTx1LrGevpVj1Djn9dni9cDJRYSe9MtMLHmwJQNz")
             .await
             .unwrap();
     }

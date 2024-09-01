@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    pool::ConnPool, AutoNAT, ListenerId, RawAutoNATState, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING,
+    pool::ConnPool, AutoNAT, ListenerId, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING,
     PROTOCOL_IPFS_PUSH_ID,
 };
 
@@ -23,7 +23,7 @@ pub(super) struct MutableSwitch {
     protos: HashMap<String, ListenerId>,
     event_mediator: EventMediator,
     unauth_inbound_streams: HashMap<String, Vec<(ProtocolStream, String)>>,
-    auto_nat_state: RawAutoNATState,
+    nat: AutoNAT,
 }
 
 impl MutableSwitch {
@@ -206,22 +206,14 @@ impl MutableSwitch {
     }
 
     pub(super) fn auto_nat(&self) -> AutoNAT {
-        self.auto_nat_state.state()
+        self.nat
     }
 
-    pub(super) fn auto_nat_success(&mut self, addr: Multiaddr) {
-        let (before, current) = self.auto_nat_state.success(addr);
-
-        if before != current {
-            self.notify(EventArgument::AutoNAT(current));
+    pub(super) fn set_nat(&mut self, state: AutoNAT) {
+        if self.nat != state {
+            self.notify(EventArgument::AutoNAT(state));
         }
-    }
 
-    pub(super) fn auto_nat_failed(&mut self) {
-        let (before, current) = self.auto_nat_state.failed();
-
-        if before != current {
-            self.notify(EventArgument::AutoNAT(current));
-        }
+        self.nat = state;
     }
 }

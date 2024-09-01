@@ -62,3 +62,4 @@ xstack-tcp = { path = "crates/tcp", version = "^0.2" }
 xstack-quic = { path = "crates/quic", version = "^0.2" }
 xstack-kad = { path = "crates/kad", version = "^0.2" }
 xstack-dnsaddr = { path = "crates/dnsaddr", version = "^0.2" }
+xstack-autonat = { path = "crates/autonat", version = "^0.2" }

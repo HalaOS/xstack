@@ -3,7 +3,6 @@ use std::{sync::Arc, time::Duration};
 use futures::lock::Mutex;
 use futures_map::KeyWaitMap;
 use multiaddr::Multiaddr;
-use rasi::task::spawn_ok;
 
 use crate::{
     book::{peerbook_syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
@@ -188,8 +187,6 @@ impl SwitchBuilder {
         for laddr in ops.laddrs {
             switch.transport_bind(&laddr).await?;
         }
-
-        spawn_ok(switch.clone().auto_nat_client());
 
         Ok(switch)
     }

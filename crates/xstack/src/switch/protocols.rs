@@ -1,16 +1,13 @@
 use std::time::SystemTime;
 
-use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
+use futures::{AsyncReadExt, AsyncWriteExt};
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::{dialer_select_proto, Version};
-use protobuf::{Message, MessageField};
-use rasi::task::spawn_ok;
+use protobuf::Message;
 
 use crate::{
-    events,
-    proto::{autonat, identity::Identity},
-    AutoNAT, Error, EventArgument, EventSource, PeerInfo, ProtocolStream, Result,
+    proto::identity::Identity, Error, EventArgument, PeerInfo, ProtocolStream, Result,
     TransportConnection,
 };
 
@@ -25,116 +22,7 @@ pub const PROTOCOL_IPFS_PUSH_ID: &str = "/ipfs/id/push/1.0.0";
 /// protocol name of libp2p ping
 pub const PROTOCOL_IPFS_PING: &str = "/ipfs/ping/1.0.0";
 
-/// String of AutoNAT Protocol
-pub const PROTOCOL_LIBP2P_AUTONAT: &str = "/libp2p/autonat/1.0.0";
-
 impl Switch {
-    pub(super) async fn auto_nat_client(self) {
-        let mut event_source: EventSource<events::Connected> =
-            EventSource::bind_with(&self, 100).await;
-
-        while let Some(peer_id) = event_source.next().await {
-            log::trace!(target:"autonat_client", "peer_id={}", peer_id);
-
-            if AutoNAT::Unknown == self.auto_nat().await {
-                if let Ok(Some(peer_info)) = self.lookup_peer_info(&peer_id).await {
-                    log::trace!(target:"autonat_client", "peer_id={}, protos={:?}", peer_id, peer_info.protos);
-                    if peer_info
-                        .protos
-                        .iter()
-                        .find(|proto| proto.as_str() == PROTOCOL_LIBP2P_AUTONAT)
-                        .is_some()
-                    {
-                        spawn_ok(self.clone().autonat_request(peer_id));
-                    }
-                }
-            }
-        }
-    }
-
-    async fn autonat_request(self, peer_id: PeerId) {
-        if let Err(err) = self.autonat_request_prv(&peer_id).await {
-            log::error!(target:"autonat_client", "peer_id={}, err={}", peer_id, err);
-        }
-    }
-    async fn autonat_request_prv(&self, peer_id: &PeerId) -> Result<()> {
-        log::trace!(target:"autonat_client", "call peer_id={}", peer_id);
-
-        let (mut stream, _) = self.connect(peer_id, [PROTOCOL_LIBP2P_AUTONAT]).await?;
-
-        let local_id = self.local_id().clone();
-
-        let laddrs = self.local_addrs().await;
-
-        let peer_info = PeerInfo {
-            id: local_id,
-            addrs: laddrs,
-            ..Default::default()
-        };
-
-        let mut message = autonat::Message::new();
-
-        let mut dial = autonat::message::Dial::new();
-
-        dial.peer = MessageField::some(autonat::message::PeerInfo {
-            id: Some(peer_info.id.to_bytes()),
-            addrs: peer_info.addrs.iter().map(|addr| addr.to_vec()).collect(),
-            ..Default::default()
-        });
-
-        message.type_ = Some(autonat::message::MessageType::DIAL.into());
-        message.dial = MessageField::some(dial);
-
-        let buf = message.write_to_bytes()?;
-
-        let mut payload_len = unsigned_varint::encode::usize_buffer();
-
-        stream
-            .write_all(unsigned_varint::encode::usize(buf.len(), &mut payload_len))
-            .await?;
-
-        stream.write_all(&buf).await?;
-
-        let body_len = unsigned_varint::aio::read_usize(&mut stream).await?;
-
-        if self.immutable.max_packet_size < body_len {
-            return Err(Error::Overflow(body_len));
-        }
-
-        let mut buf = vec![0; body_len];
-
-        stream.read_exact(&mut buf).await?;
-
-        let message = autonat::Message::parse_from_bytes(&buf)?;
-
-        let response = message
-            .dialResponse
-            .into_option()
-            .ok_or(Error::AutoNatResponse)?;
-
-        log::trace!(
-            target:"autonat_client",
-            "response from={}, status={:?}",
-            stream.public_key().to_peer_id(),
-            response.status()
-        );
-
-        match response.status() {
-            autonat::message::ResponseStatus::OK => {
-                if let Some(addr) = response.addr {
-                    let addr = Multiaddr::try_from(addr)?;
-
-                    self.mutable.lock().await.auto_nat_success(addr);
-                }
-            }
-            _ => {
-                self.mutable.lock().await.auto_nat_failed();
-            }
-        }
-
-        Ok(())
-    }
-
     /// Handle `/ipfs/ping/1.0.0` request.
     pub(super) async fn ping_echo(&self, mut stream: ProtocolStream) -> Result<()> {
         loop {

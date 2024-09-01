@@ -4,7 +4,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use super::{immutable::ImmutableSwitch, AutoNAT, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
@@ -524,8 +524,23 @@ impl Switch {
     }
 
     /// Returns the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
-    pub async fn auto_nat(&self) -> AutoNAT {
+    pub async fn nat(&self) -> AutoNAT {
         self.mutable.lock().await.auto_nat()
+    }
+
+    /// Set the the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
+    pub async fn set_nat(&self, state: AutoNAT) {
+        self.mutable.lock().await.set_nat(state)
+    }
+
+    /// Returns the `max_packet_size` configuration value.
+    pub fn max_packet_size(&self) -> usize {
+        self.immutable.max_packet_size
+    }
+
+    /// Returns the protocol `timeout` configuration value.
+    pub fn timeout(&self) -> Duration {
+        self.immutable.timeout
     }
 
     /// Register self into global context.

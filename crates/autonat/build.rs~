@@ -8,7 +8,7 @@ fn main() {
         // All inputs and imports from the inputs must reside in `includes` directories.
         // Inputs must reside in some of include paths.
         .includes(&["proto"])
-        .input("proto/identity.proto")
+        .input("proto/autonat.proto")
         // Specify output directory relative to Cargo output directory.
         .out_dir("src/proto")
         .run_from_script();
