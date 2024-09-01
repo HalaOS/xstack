@@ -8,12 +8,12 @@ use protobuf::{EnumOrUnknown, MessageField};
 
 use crate::{
     proto::circuit::{self, hop_message, stop_message, HopMessage, Status, StopMessage},
-    Result,
+    Error, Result,
 };
 
 use xstack::{identity::PeerId, multiaddr::Multiaddr, XStackRpc};
 
-/// Result of [`circuit_v2_reserve`](CircuitV2Rpc::circuit_v2_reserve) function
+/// Result of [`circuit_v2_hop_reserve`](CircuitV2Rpc::circuit_v2_hop_reserve) function
 #[derive(Debug, Clone)]
 pub struct Reservation {
     /// expiration time of the voucher
@@ -184,6 +184,33 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
             }
 
             Ok(())
+        }
+    }
+
+    /// make a connect to relayer via this stream.
+    fn circuit_v2_stop_connect_accept(
+        mut self,
+        max_recv_len: usize,
+    ) -> impl Future<Output = Result<Option<Limit>>>
+    where
+        Self: Sized,
+    {
+        async move {
+            let stop_message =
+                XStackRpc::xstack_recv::<StopMessage>(&mut self, max_recv_len).await?;
+
+            if stop_message.type_ != Some(stop_message::Type::CONNECT.into()) {
+                return Err(Error::CircuitStop("expect CONNECT".to_owned()).into());
+            }
+
+            let mut response = StopMessage::new();
+
+            response.type_ = Some(stop_message::Type::STATUS.into());
+
+            response.status = Some(Status::OK.into());
+            XStackRpc::xstack_send(&mut self, &response).await?;
+
+            Ok(stop_message.limit.into_option().map(|limits| limits.into()))
         }
     }
 }

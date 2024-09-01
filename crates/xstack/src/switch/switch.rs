@@ -373,22 +373,10 @@ impl Switch {
             );
         }
     }
-}
-
-impl Switch {
-    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
-    pub fn new<A>(agent_version: A) -> SwitchBuilder
-    where
-        A: AsRef<str>,
-    {
-        SwitchBuilder::new(agent_version.as_ref().to_owned())
-    }
 
     /// Create a new transport layer socket that accepts peer's inbound connections.
     ///
-    /// protocols such as [`circuit`] call this function to dynamic launch sub-protocol
-    /// '/libp2p/circuit/relay/0.2.0/stop'.
-    pub async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
+    pub(crate) async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
         let transport = self
             .immutable
             .get_transport_by_address(laddr)
@@ -411,6 +399,16 @@ impl Switch {
         });
 
         Ok(())
+    }
+}
+
+impl Switch {
+    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
+    pub fn new<A>(agent_version: A) -> SwitchBuilder
+    where
+        A: AsRef<str>,
+    {
+        SwitchBuilder::new(agent_version.as_ref().to_owned())
     }
 
     /// Connect to peer with provided [`raddr`](Multiaddr).

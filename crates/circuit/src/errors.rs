@@ -23,7 +23,19 @@ pub enum Error {
 
     #[error(transparent)]
     Multiaddr(#[from] multiaddr::Error),
+
+    #[error("circuit/stop, {0}")]
+    CircuitStop(String),
 }
 
 /// The result type of this crate.
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<Error> for std::io::Error {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::IoError(err) => err,
+            err => std::io::Error::new(std::io::ErrorKind::Other, err),
+        }
+    }
+}
