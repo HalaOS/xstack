@@ -106,9 +106,9 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
     }
 
     /// make a connect to relayer via this stream.
-    fn circuit_v2_hop_connect<M>(
+    fn circuit_v2_hop_connect(
         self,
-        id: PeerId,
+        id: &PeerId,
         max_recv_len: usize,
     ) -> impl Future<Output = Result<Option<Limit>>>
     where

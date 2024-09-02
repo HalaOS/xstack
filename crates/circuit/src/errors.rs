@@ -26,6 +26,9 @@ pub enum Error {
 
     #[error("circuit/stop, {0}")]
     CircuitStop(String),
+
+    #[error("Invalid multiaddr for circuit connect function")]
+    ConnectAddr,
 }
 
 /// The result type of this crate.

@@ -20,7 +20,7 @@ use xstack::{
 };
 use xstack_tls::{create_ssl_acceptor, SslAcceptor, TlsConn};
 
-use crate::{CircuitV2Rpc, Result, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP};
+use crate::{CircuitV2Rpc, Error, Result, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP};
 
 /// The implementation of transport [**circuit_v2**].
 ///
@@ -76,7 +76,34 @@ impl DriverTransport for CircuitTransport {
         raddr: &Multiaddr,
         switch: Switch,
     ) -> std::io::Result<TransportConnection> {
-        todo!()
+        let peer_addr = raddr.clone();
+        let mut raddr = raddr.clone();
+
+        let circuit_addr = Multiaddr::empty().with(Protocol::P2pCircuit);
+
+        let (raddr, peer_id) = if let Some(Protocol::P2p(id)) = raddr.pop() {
+            if let Some(Protocol::P2pCircuit) = raddr.pop() {
+                (raddr, id)
+            } else {
+                return Err(Error::ConnectAddr.into());
+            }
+        } else {
+            return Err(Error::ConnectAddr.into());
+        };
+
+        let (mut stream, _) = switch.connect(&raddr, [PROTOCOL_CIRCUIT_RELAY_HOP]).await?;
+
+        let limits =
+            CircuitV2Rpc::circuit_v2_hop_connect(&mut stream, &peer_id, switch.max_packet_size())
+                .await?;
+
+        log::trace!("circuit_v2, connection limits={:?}", limits);
+
+        let local_addr = stream.local_addr().clone();
+
+        let conn = TlsConn::connect(&switch, stream, local_addr, peer_addr).await?;
+
+        Ok(conn.into())
     }
 
     /// Check if this transport support the protocol stack represented by the `addr`.
@@ -89,9 +116,6 @@ impl DriverTransport for CircuitTransport {
         }
 
         // below codes for connect function
-        if addr.ends_with(&circuit_addr) {
-            return true;
-        }
 
         let mut addr = addr.clone();
 
@@ -227,7 +251,7 @@ impl CircuitHopClient {
                     .find(|proto| proto.as_str() == PROTOCOL_CIRCUIT_RELAY_HOP)
                     .is_some()
                 {
-                    log::trace!("find circuit_v2/hop node, {}", peer_id);
+                    // log::trace!("found circuit_v2/hop node, {}", peer_id);
                 }
             }
         }
@@ -282,7 +306,7 @@ impl CircuitStopServer {
         let mut incoming = listener.into_incoming();
 
         while let Some((stream, _)) = incoming.try_next().await? {
-            if AutoNAT::Nat != self.state.switch.nat().await {
+            if AutoNAT::NAT != self.state.switch.nat().await {
                 log::trace!("drop inbound stream, the switch is not in the nat status.");
                 self.state.raw.lock().await.pause();
                 continue;
@@ -327,7 +351,7 @@ impl CircuitStopServer {
             }
         };
 
-        if self.state.switch.nat().await == AutoNAT::Nat {
+        if self.state.switch.nat().await == AutoNAT::NAT {
             if self.state.raw.lock().await.inbound(conn.into()) {
                 self.state.event_map.insert(CircuitEvent::Incoming, ());
             }
@@ -376,11 +400,13 @@ impl DriverListener for CircuitListener {
 #[cfg(test)]
 mod tests {
 
-    use std::sync::Once;
+    use std::{sync::Once, time::Instant};
 
+    use futures::{AsyncReadExt, AsyncWriteExt};
+    use rand::{thread_rng, RngCore};
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 
-    use xstack::identity::PeerId;
+    use xstack::{PeerInfo, PROTOCOL_IPFS_PING};
     use xstack_autonat::AutoNatClient;
     use xstack_dnsaddr::DnsAddr;
     use xstack_kad::KademliaRouter;
@@ -423,12 +449,77 @@ mod tests {
 
         AutoNatClient::bind_with(&switch);
 
-        let peer_id = PeerId::random();
+        let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
+            .parse()
+            .unwrap();
 
-        let peer_info = kad.find_node(&peer_id).await.unwrap();
+        let now = Instant::now();
 
-        log::info!("find_node: {}, {:?}", peer_id, peer_info);
+        let peer_info = kad.find_node(&peer_id).await.unwrap().expect("found peer");
 
-        log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
+        log::trace!(
+            "kad search peer_d={}, times={:?} success",
+            peer_id,
+            now.elapsed(),
+        );
+
+        let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
+
+        let addrs = peer_info
+            .addrs
+            .iter()
+            .flat_map(|addr| {
+                if addr.ends_with(&circuit_suffix) {
+                    Some(addr.clone().with_p2p(peer_id))
+                } else {
+                    None
+                }
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+
+        // log::trace!("add circuit addresses={:#?}", addrs);
+
+        let peer_info = PeerInfo {
+            id: peer_info.id,
+            addrs,
+            ..Default::default()
+        };
+
+        switch.insert_peer_info(peer_info).await.unwrap();
+
+        let now = Instant::now();
+
+        let (mut stream, _) = switch
+            .connect(&peer_id, [PROTOCOL_IPFS_PING])
+            .await
+            .unwrap();
+
+        log::trace!(
+            "circuit_v2 connect peer_id={}: times={:?}, raddr={}",
+            peer_id,
+            now.elapsed(),
+            stream.peer_addr(),
+        );
+
+        let mut buf = vec![0u8; 32];
+
+        thread_rng().fill_bytes(&mut buf);
+
+        let now = Instant::now();
+
+        stream.write_all(&buf).await.unwrap();
+
+        let mut echo = vec![0u8; 32];
+
+        stream.read_exact(&mut echo).await.unwrap();
+
+        assert_eq!(echo, buf);
+
+        log::trace!(
+            "circuit_v2 ping peer_id={}: times={:?}",
+            peer_id,
+            now.elapsed()
+        );
     }
 }

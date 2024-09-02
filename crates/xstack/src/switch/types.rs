@@ -4,7 +4,7 @@ pub enum AutoNAT {
     /// the node is a public node.
     Public,
     /// the node is behind  nat/firewall.
-    Nat,
+    NAT,
     /// Cannot determine if the node is behind nat/firewall
     Unknown,
 }

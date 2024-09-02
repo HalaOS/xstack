@@ -148,6 +148,12 @@ impl DriverTransport for QuicTransport {
 
     /// Check if this transport support the protocol stack represented by the `addr`.
     fn multiaddr_hit(&self, addr: &Multiaddr) -> bool {
+        for proto in addr.iter() {
+            if proto == Protocol::P2pCircuit {
+                return false;
+            }
+        }
+
         let stack = addr.protocol_stack().collect::<Vec<_>>();
 
         if stack.len() > 1 {

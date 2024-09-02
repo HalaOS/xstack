@@ -59,7 +59,7 @@ impl RawAutoNatClient {
         {
             AutoNAT::Public
         } else if self.dial_failed > 2 {
-            AutoNAT::Nat
+            AutoNAT::NAT
         } else {
             AutoNAT::Unknown
         }

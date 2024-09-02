@@ -15,7 +15,10 @@ use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::{dialer_select_proto, listener_select_proto, Version};
 
-use rand::{seq::IteratorRandom, thread_rng};
+use rand::{
+    seq::{IteratorRandom, SliceRandom},
+    thread_rng,
+};
 use rasi::{task::spawn_ok, timer::TimeoutExt};
 
 use crate::{
@@ -330,7 +333,11 @@ impl Switch {
 
         let mut last_error = None;
 
-        for raddr in peer_info.addrs {
+        let mut addrs = peer_info.addrs.clone();
+
+        addrs.shuffle(&mut thread_rng());
+
+        for raddr in addrs {
             let raddr = match raddr.with_p2p(id.clone()) {
                 Ok(raddr) => raddr,
                 Err(raddr) => raddr,
