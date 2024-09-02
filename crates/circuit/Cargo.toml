@@ -16,6 +16,8 @@ rasi = { workspace = true }
 protobuf = { workspace = true }
 unsigned-varint = { workspace = true, features = ["futures"] }
 async-trait = { workspace = true }
+futures-map = { workspace = true }
+xstack-tls = { workspace = true }
 
 [build-dependencies]
 protobuf-codegen = { workspace = true }

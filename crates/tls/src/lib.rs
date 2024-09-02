@@ -16,9 +16,7 @@ use async_trait::async_trait;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, Stream, TryStreamExt};
 use futures_boring::{
     accept, connect, ec, pkey,
-    ssl::{
-        SslAcceptor, SslAlert, SslConnector, SslMethod, SslVerifyError, SslVerifyMode, SslVersion,
-    },
+    ssl::{SslAlert, SslConnector, SslMethod, SslVerifyError, SslVerifyMode, SslVersion},
     x509::X509,
 };
 use futures_yamux::{Reason, YamuxConn, YamuxStream, INIT_WINDOW_SIZE};
@@ -30,6 +28,49 @@ use xstack::{
     transport_syscall::{DriverConnection, DriverListener, DriverStream},
     ProtocolStream, Switch, TransportConnection,
 };
+
+pub use futures_boring::ssl::SslAcceptor;
+pub async fn create_ssl_acceptor(switch: &Switch) -> Result<SslAcceptor> {
+    let (cert, pk) = xstack_x509::generate(switch.keystore()).await?;
+
+    let cert = X509::from_der(&cert)?;
+
+    let pk = pkey::PKey::from_ec_key(ec::EcKey::private_key_from_der(&pk)?)?;
+
+    let mut ssl_acceptor_builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls())?;
+
+    ssl_acceptor_builder.set_max_proto_version(Some(SslVersion::TLS1_3))?;
+    ssl_acceptor_builder.set_min_proto_version(Some(SslVersion::TLS1_3))?;
+
+    ssl_acceptor_builder.set_certificate(&cert)?;
+
+    ssl_acceptor_builder.set_private_key(&pk)?;
+
+    ssl_acceptor_builder.check_private_key()?;
+
+    ssl_acceptor_builder.set_custom_verify_callback(
+        SslVerifyMode::PEER | SslVerifyMode::FAIL_IF_NO_PEER_CERT,
+        |ssl| {
+            let cert = ssl
+                .peer_certificate()
+                .ok_or(SslVerifyError::Invalid(SslAlert::CERTIFICATE_REQUIRED))?;
+
+            let cert = cert
+                .to_der()
+                .map_err(|_| SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE))?;
+
+            let peer_id = xstack_x509::verify(cert)
+                .map_err(|_| SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE))?
+                .to_peer_id();
+
+            log::trace!("ssl_server: verified peer={}", peer_id);
+
+            Ok(())
+        },
+    );
+
+    Ok(ssl_acceptor_builder.build())
+}
 
 /// A listener over tls/yamux.
 pub struct TlsListener<Incoming> {
@@ -44,45 +85,7 @@ pub struct TlsListener<Incoming> {
 impl<Incoming> TlsListener<Incoming> {
     /// Create a new `TlsListener` instance.
     pub async fn new(switch: &Switch, local_addr: Multiaddr, incoming: Incoming) -> Result<Self> {
-        let (cert, pk) = xstack_x509::generate(switch.keystore()).await?;
-
-        let cert = X509::from_der(&cert)?;
-
-        let pk = pkey::PKey::from_ec_key(ec::EcKey::private_key_from_der(&pk)?)?;
-
-        let mut ssl_acceptor_builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls())?;
-
-        ssl_acceptor_builder.set_max_proto_version(Some(SslVersion::TLS1_3))?;
-        ssl_acceptor_builder.set_min_proto_version(Some(SslVersion::TLS1_3))?;
-
-        ssl_acceptor_builder.set_certificate(&cert)?;
-
-        ssl_acceptor_builder.set_private_key(&pk)?;
-
-        ssl_acceptor_builder.check_private_key()?;
-
-        ssl_acceptor_builder.set_custom_verify_callback(
-            SslVerifyMode::PEER | SslVerifyMode::FAIL_IF_NO_PEER_CERT,
-            |ssl| {
-                let cert = ssl
-                    .peer_certificate()
-                    .ok_or(SslVerifyError::Invalid(SslAlert::CERTIFICATE_REQUIRED))?;
-
-                let cert = cert
-                    .to_der()
-                    .map_err(|_| SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE))?;
-
-                let peer_id = xstack_x509::verify(cert)
-                    .map_err(|_| SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE))?
-                    .to_peer_id();
-
-                log::trace!("ssl_server: verified peer={}", peer_id);
-
-                Ok(())
-            },
-        );
-
-        let ssl_acceptor = ssl_acceptor_builder.build();
+        let ssl_acceptor = create_ssl_acceptor(switch).await?;
 
         Ok(Self {
             ssl_acceptor,
@@ -100,31 +103,18 @@ where
 {
     /// Accept next incoming connection between local and peer.
     async fn accept(&mut self) -> Result<TransportConnection> {
-        let (mut stream, raddr) = match self.incoming.try_next().await? {
+        let (stream, raddr) = match self.incoming.try_next().await? {
             Some((stream, raddr)) => (stream, raddr),
             None => {
                 return Err(Error::new(ErrorKind::BrokenPipe, "TlsListener closed"));
             }
         };
 
-        let (_, _) = listener_select_proto(&mut stream, ["/tls/1.0.0"]).await?;
-
-        let mut stream = accept(&self.ssl_acceptor, stream)
-            .await
-            .map_err(|err| Error::new(ErrorKind::BrokenPipe, err.to_string()))?;
-
-        let cert = stream
-            .ssl()
-            .peer_certificate()
-            .ok_or(Error::new(ErrorKind::Other, "Handshaking"))?;
-
-        let public_key = xstack_x509::verify(cert.to_der()?)?;
-
-        let (_, _) = listener_select_proto(&mut stream, ["/yamux/1.0.0"]).await?;
-
-        let conn = TlsConn::new(stream, true, public_key, self.local_addr.clone(), raddr)?;
-
-        Ok(conn.into())
+        Ok(
+            TlsConn::accept(stream, self.local_addr.clone(), raddr, &self.ssl_acceptor)
+                .await?
+                .into(),
+        )
     }
 
     /// Returns the local address that this listener is bound to.
@@ -213,6 +203,35 @@ impl TlsConn {
         let (_, _) = dialer_select_proto(&mut stream, ["/yamux/1.0.0"], Version::V1).await?;
 
         let conn = TlsConn::new(stream, false, public_key, local_addr, peer_addr)?;
+
+        Ok(conn.into())
+    }
+
+    pub async fn accept<S>(
+        mut stream: S,
+        local_addr: Multiaddr,
+        peer_addr: Multiaddr,
+        acceptor: &SslAcceptor,
+    ) -> Result<Self>
+    where
+        S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
+    {
+        let (_, _) = listener_select_proto(&mut stream, ["/tls/1.0.0"]).await?;
+
+        let mut stream = accept(acceptor, stream)
+            .await
+            .map_err(|err| Error::new(ErrorKind::BrokenPipe, err.to_string()))?;
+
+        let cert = stream
+            .ssl()
+            .peer_certificate()
+            .ok_or(Error::new(ErrorKind::Other, "Handshaking"))?;
+
+        let public_key = xstack_x509::verify(cert.to_der()?)?;
+
+        let (_, _) = listener_select_proto(&mut stream, ["/yamux/1.0.0"]).await?;
+
+        let conn = TlsConn::new(stream, true, public_key, local_addr, peer_addr)?;
 
         Ok(conn.into())
     }

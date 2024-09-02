@@ -1,19 +1,50 @@
+use std::ops::Deref;
+
 use rasi::task::spawn_ok;
 
 use crate::{transport::ProtocolStream, Result};
 
 use super::{ListenerId, Switch, SwitchInnerEvent};
 
-/// A server-side socket that accept new inbound [`ProtocolStream`]
 #[derive(Clone)]
-pub struct ProtocolListener {
+pub struct ProtocolListenerState {
     id: ListenerId,
     switch: Switch,
 }
 
+impl ProtocolListenerState {
+    /// Close the listener.
+    pub async fn close(&self) {
+        self.switch
+            .mutable
+            .lock()
+            .await
+            .close_protocol_listener(&self.id);
+    }
+
+    /// Accept a new inbound [`ProtocolStream`].
+    ///
+    /// On success, returns the negotiated protocol id with the stream.
+    pub async fn accept(&self) -> Result<(ProtocolStream, String)> {
+        loop {
+            if let Some(incoming) = self.switch.mutable.lock().await.incoming_next(&self.id)? {
+                return Ok(incoming);
+            }
+
+            _ = self
+                .switch
+                .event_map
+                .wait(&SwitchInnerEvent::Accept(self.id), ());
+        }
+    }
+}
+
+/// A server-side socket that accept new inbound [`ProtocolStream`]
+pub struct ProtocolListener(ProtocolListenerState);
+
 impl ProtocolListener {
     pub(super) fn new(id: ListenerId, switch: Switch) -> Self {
-        Self { id, switch }
+        Self(ProtocolListenerState { id, switch })
     }
 
     /// Create a new `ProtocolListener` with `protos`.
@@ -41,38 +72,8 @@ impl ProtocolListener {
         switch.bind(protos).await
     }
 
-    /// Close the listener.
-    pub async fn close(&self) {
-        self.switch
-            .mutable
-            .lock()
-            .await
-            .close_protocol_listener(&self.id);
-    }
-}
-
-impl Drop for ProtocolListener {
-    fn drop(&mut self) {
-        let this = self.clone();
-        spawn_ok(async move { this.close().await });
-    }
-}
-
-impl ProtocolListener {
-    /// Accept a new inbound [`ProtocolStream`].
-    ///
-    /// On success, returns the negotiated protocol id with the stream.
-    pub async fn accept(&self) -> Result<(ProtocolStream, String)> {
-        loop {
-            if let Some(incoming) = self.switch.mutable.lock().await.incoming_next(&self.id)? {
-                return Ok(incoming);
-            }
-
-            _ = self
-                .switch
-                .event_map
-                .wait(&SwitchInnerEvent::Accept(self.id), ());
-        }
+    pub fn to_state(&self) -> ProtocolListenerState {
+        self.0.clone()
     }
 
     /// Conver the switch into a [`Stream`](futures::Stream) object.
@@ -83,5 +84,21 @@ impl ProtocolListener {
             let res = listener.accept().await;
             Some((res, listener))
         }))
+    }
+}
+
+impl Drop for ProtocolListener {
+    fn drop(&mut self) {
+        let state = self.to_state();
+        spawn_ok(async move {
+            state.close().await;
+        });
+    }
+}
+
+impl Deref for ProtocolListener {
+    type Target = ProtocolListenerState;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
