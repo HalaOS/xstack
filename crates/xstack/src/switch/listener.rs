@@ -5,6 +5,7 @@ use crate::{transport::ProtocolStream, Result};
 use super::{ListenerId, Switch, SwitchInnerEvent};
 
 /// A server-side socket that accept new inbound [`ProtocolStream`]
+#[derive(Clone)]
 pub struct ProtocolListener {
     id: ListenerId,
     switch: Switch,
@@ -39,15 +40,21 @@ impl ProtocolListener {
     {
         switch.bind(protos).await
     }
+
+    /// Close the listener.
+    pub async fn close(&self) {
+        self.switch
+            .mutable
+            .lock()
+            .await
+            .close_protocol_listener(&self.id);
+    }
 }
 
 impl Drop for ProtocolListener {
     fn drop(&mut self) {
-        let switch = self.switch.clone();
-        let id = self.id;
-        spawn_ok(async move {
-            switch.mutable.lock().await.close_protocol_listener(&id);
-        })
+        let this = self.clone();
+        spawn_ok(async move { this.close().await });
     }
 }
 

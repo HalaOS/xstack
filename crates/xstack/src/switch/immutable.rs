@@ -38,7 +38,7 @@ impl ImmutableSwitch {
             max_conn_pool_size: 20,
             agent_version,
             timeout: Duration::from_secs(10),
-            max_packet_size: 4096,
+            max_packet_size: 1024 * 1024 * 4,
             transports: vec![],
             keystore: MemoryKeyStore::random().into(),
             peer_book: MemoryPeerBook::default().into(),
@@ -126,8 +126,8 @@ impl SwitchBuilder {
         })
     }
 
-    /// Set the receive max buffer length of identity protocol.
-    pub fn max_identity_packet_size(self, value: usize) -> Self {
+    /// Set the maximum length of incoming rpc packets. the default value is `1024 * 1024 * 4`
+    pub fn max_packet_size(self, value: usize) -> Self {
         self.and_then(|mut cfg| {
             cfg.immutable.max_packet_size = value;
 

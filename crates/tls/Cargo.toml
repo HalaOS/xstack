@@ -1,0 +1,19 @@
+[package]
+description = "The secure channel implementation for xstack"
+documentation = "https://docs.rs/xstack-tls"
+edition.workspace = true
+license = "MIT"
+name = "xstack-tls"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+futures-yamux = { workspace = true }
+xstack-x509 = { workspace = true }
+xstack = { workspace = true }
+log = { workspace = true }
+multistream-select = { workspace = true }
+futures-boring = { workspace = true }
+futures = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }

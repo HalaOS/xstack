@@ -16,11 +16,6 @@ rasi = { workspace = true }
 protobuf = { workspace = true }
 unsigned-varint = { workspace = true, features = ["futures"] }
 async-trait = { workspace = true }
-futures-yamux = { workspace = true }
-xstack-x509 = { workspace = true }
-multistream-select = { workspace = true }
-futures-boring = { workspace = true }
-uuid = { workspace = true }
 
 [build-dependencies]
 protobuf-codegen = { workspace = true }

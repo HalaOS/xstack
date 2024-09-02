@@ -473,7 +473,8 @@ mod tests {
 
         let kad = KademliaRouter::with(&switch)
             .with_seeds([
-                "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+                 "/ip4/104.131.131.82/tcp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+                
             ])
             .await
             .unwrap();
@@ -495,7 +496,7 @@ mod tests {
 
         let kad = KademliaRouter::with(&switch)
             .with_seeds([
-                "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+                "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
             ])
             .await
             .unwrap();
