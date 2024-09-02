@@ -11,10 +11,11 @@ use futures::{lock::Mutex, TryStreamExt};
 use futures_map::KeyWaitMap;
 use rasi::task::spawn_ok;
 use xstack::{
+    events::Connected,
     multiaddr::{Multiaddr, Protocol},
     transport_syscall::{DriverListener, DriverTransport},
-    AutoNAT, ProtocolListener, ProtocolListenerState, ProtocolStream, Switch, TransportConnection,
-    TransportListener,
+    AutoNAT, EventSource, ProtocolListener, ProtocolListenerState, ProtocolStream, Switch,
+    TransportConnection, TransportListener,
 };
 use xstack_tls::{create_ssl_acceptor, SslAcceptor, TlsConn};
 
@@ -65,7 +66,7 @@ impl DriverTransport for CircuitTransport {
             ));
         }
 
-        Ok(CircuitListener::new(switch, laddr.clone()).await?.into())
+        Ok(CircuitListener::new(&switch, laddr.clone()).await?.into())
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
@@ -109,12 +110,12 @@ enum CircuitEvent {
 }
 
 #[derive(Default)]
-struct RawCircuitListener {
+struct RawCircuitTransportState {
     proto_listener: Option<ProtocolListenerState>,
     incoming_conn: VecDeque<TransportConnection>,
 }
 
-impl RawCircuitListener {
+impl RawCircuitTransportState {
     fn next_incoming(&mut self) -> Option<TransportConnection> {
         self.incoming_conn.pop_front()
     }
@@ -146,33 +147,110 @@ impl RawCircuitListener {
 }
 
 #[derive(Clone)]
-struct CircuitListenerState {
-    local_addr: Multiaddr,
+struct CircuitTransportState {
     switch: Switch,
-    raw: Arc<Mutex<RawCircuitListener>>,
+    raw: Arc<Mutex<RawCircuitTransportState>>,
     event_map: Arc<KeyWaitMap<CircuitEvent, ()>>,
-    ssl_acceptor: SslAcceptor,
 }
 
-// handlers for circuit/stop server.
-impl CircuitListenerState {
-    async fn circuit_stop_server_loop(self, listener: ProtocolListener) {
+impl CircuitTransportState {
+    async fn close(&self) {
+        self.raw.lock().await.close().await;
+        self.event_map.cancel_all();
+    }
+
+    /// Accept next incoming connection between local and peer.
+    async fn accept(&mut self) -> std::io::Result<TransportConnection> {
+        loop {
+            let mut raw = self.raw.lock().await;
+
+            if raw.is_closed() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "CircuitListener is closed.",
+                ));
+            }
+
+            if let Some(conn) = raw.next_incoming() {
+                return Ok(conn);
+            }
+
+            self.event_map.wait(&CircuitEvent::Incoming, raw).await;
+        }
+    }
+}
+
+#[allow(unused)]
+struct CircuitHopClient {
+    event_source: EventSource<Connected>,
+    state: CircuitTransportState,
+}
+
+impl CircuitHopClient {
+    async fn bind(switch: &Switch, state: &CircuitTransportState) {
+        let event_source = EventSource::bind_with(switch, 100).await;
+
+        spawn_ok(
+            Self {
+                state: state.clone(),
+                event_source,
+            }
+            .run_loop(),
+        );
+    }
+
+    async fn run_loop(self) {}
+}
+
+#[derive(Clone)]
+struct CircuitStopServer {
+    ssl_acceptor: SslAcceptor,
+    state: CircuitTransportState,
+}
+
+impl CircuitStopServer {
+    async fn bind(switch: &Switch) -> Result<CircuitTransportState> {
+        let listener = switch.bind([PROTOCOL_CIRCUIT_RELAY_STOP]).await?;
+
+        let ssl_acceptor = create_ssl_acceptor(&switch).await?;
+
+        let state = CircuitTransportState {
+            switch: switch.clone(),
+            raw: Arc::new(Mutex::new(RawCircuitTransportState {
+                proto_listener: Some(listener.to_state()),
+                ..Default::default()
+            })),
+            event_map: Default::default(),
+        };
+
+        spawn_ok(
+            Self {
+                ssl_acceptor,
+                state: state.clone(),
+            }
+            .run_loop(listener),
+        );
+
+        Ok(state)
+    }
+
+    async fn run_loop(self, listener: ProtocolListener) {
         if let Err(err) = self.circuit_stop_server_loop_prv(listener).await {
             log::error!("circuit_relay_stop_handler, err={}", err);
         } else {
             log::error!("circuit_relay_stop_handler stopped.");
         }
 
-        self.close().await;
+        self.state.close().await;
     }
 
     async fn circuit_stop_server_loop_prv(&self, listener: ProtocolListener) -> Result<()> {
         let mut incoming = listener.into_incoming();
 
         while let Some((stream, _)) = incoming.try_next().await? {
-            if AutoNAT::Nat != self.switch.nat().await {
+            if AutoNAT::Nat != self.state.switch.nat().await {
                 log::trace!("drop inbound stream, the switch is not in the nat status.");
-                self.raw.lock().await.pause();
+                self.state.raw.lock().await.pause();
                 continue;
             }
 
@@ -183,9 +261,11 @@ impl CircuitListenerState {
     }
 
     async fn handle_circuit_stop_incoming_stream(self, mut stream: ProtocolStream) {
-        if let Err(err) =
-            CircuitV2Rpc::circuit_v2_stop_connect_accept(&mut stream, self.switch.max_packet_size())
-                .await
+        if let Err(err) = CircuitV2Rpc::circuit_v2_stop_connect_accept(
+            &mut stream,
+            self.state.switch.max_packet_size(),
+        )
+        .await
         {
             log::error!(
                 "circuit_v2_stop_connect_accept, from={}, err={}",
@@ -213,69 +293,17 @@ impl CircuitListenerState {
             }
         };
 
-        if self.switch.nat().await == AutoNAT::Nat {
-            if self.raw.lock().await.inbound(conn.into()) {
-                self.event_map.insert(CircuitEvent::Incoming, ());
+        if self.state.switch.nat().await == AutoNAT::Nat {
+            if self.state.raw.lock().await.inbound(conn.into()) {
+                self.state.event_map.insert(CircuitEvent::Incoming, ());
             }
         }
-    }
-}
-
-impl CircuitListenerState {
-    async fn new(switch: Switch, local_addr: Multiaddr) -> Result<Self> {
-        let listener = switch.bind([PROTOCOL_CIRCUIT_RELAY_STOP]).await?;
-
-        let ssl_acceptor = create_ssl_acceptor(&switch).await?;
-
-        let this = Self {
-            switch,
-            local_addr,
-            ssl_acceptor,
-            raw: Arc::new(Mutex::new(RawCircuitListener {
-                proto_listener: Some(listener.to_state()),
-                ..Default::default()
-            })),
-            event_map: Default::default(),
-        };
-
-        // start '/libp2p/circuit/relay/0.2.0/stop' server handle.
-        spawn_ok(this.clone().circuit_stop_server_loop(listener));
-
-        Ok(this)
-    }
-    async fn close(&self) {
-        self.raw.lock().await.close().await;
-        self.event_map.cancel_all();
-    }
-
-    /// Accept next incoming connection between local and peer.
-    async fn accept(&mut self) -> std::io::Result<TransportConnection> {
-        loop {
-            let mut raw = self.raw.lock().await;
-
-            if raw.is_closed() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "CircuitListener is closed.",
-                ));
-            }
-
-            if let Some(conn) = raw.next_incoming() {
-                return Ok(conn);
-            }
-
-            self.event_map.wait(&CircuitEvent::Incoming, raw).await;
-        }
-    }
-
-    /// Returns the local address that this listener is bound to.
-    fn local_addr(&self) -> std::io::Result<Multiaddr> {
-        Ok(self.local_addr.clone())
     }
 }
 
 struct CircuitListener {
-    state: CircuitListenerState,
+    local_addr: Multiaddr,
+    state: CircuitTransportState,
 }
 
 impl Drop for CircuitListener {
@@ -289,10 +317,12 @@ impl Drop for CircuitListener {
 }
 
 impl CircuitListener {
-    async fn new(switch: Switch, local_addr: Multiaddr) -> Result<Self> {
-        Ok(Self {
-            state: CircuitListenerState::new(switch, local_addr).await?,
-        })
+    async fn new(switch: &Switch, local_addr: Multiaddr) -> Result<Self> {
+        let state = CircuitStopServer::bind(switch).await?;
+
+        CircuitHopClient::bind(&switch, &state).await;
+
+        Ok(Self { state, local_addr })
     }
 }
 
@@ -305,6 +335,66 @@ impl DriverListener for CircuitListener {
 
     /// Returns the local address that this listener is bound to.
     fn local_addr(&self) -> std::io::Result<Multiaddr> {
-        self.state.local_addr()
+        Ok(self.local_addr.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::sync::Once;
+
+    use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
+
+    use xstack::identity::PeerId;
+    use xstack_autonat::AutoNatClient;
+    use xstack_dnsaddr::DnsAddr;
+    use xstack_kad::KademliaRouter;
+    use xstack_quic::QuicTransport;
+    use xstack_tcp::TcpTransport;
+
+    use super::*;
+
+    async fn init() -> Switch {
+        static INIT: Once = Once::new();
+
+        INIT.call_once(|| {
+            _ = pretty_env_logger::try_init_timed();
+
+            register_mio_network();
+            register_mio_timer();
+        });
+
+        Switch::new("kad-test")
+            .transport(QuicTransport::default())
+            .transport(TcpTransport)
+            .transport(DnsAddr::new().await.unwrap())
+            .transport(CircuitTransport::default())
+            .transport_bind(["/p2p-circuit"])
+            .create()
+            .await
+            .unwrap()
+    }
+
+    #[futures_test::test]
+    async fn test_circuit() {
+        let switch = init().await;
+
+        let kad = KademliaRouter::with(&switch)
+            .with_seeds([
+                 "/ip4/104.131.131.82/tcp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+            ])
+            .await
+            .unwrap();
+
+        AutoNatClient::bind_with(&switch);
+
+        let peer_id = PeerId::random();
+
+        let peer_info = kad.find_node(&peer_id).await.unwrap();
+
+        log::info!("find_node: {}, {:?}", peer_id, peer_info);
+
+        log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
     }
 }

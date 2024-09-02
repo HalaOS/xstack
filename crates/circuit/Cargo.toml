@@ -19,6 +19,17 @@ async-trait = { workspace = true }
 futures-map = { workspace = true }
 xstack-tls = { workspace = true }
 
+[dev-dependencies]
+xstack-kad = { workspace = true }
+futures-test = { workspace = true }
+rasi-mio = { workspace = true }
+pretty_env_logger = { workspace = true }
+xstack-tcp = { workspace = true }
+xstack-quic = { workspace = true }
+xstack-dnsaddr = { workspace = true }
+xstack-autonat = { workspace = true }
+xstack = { workspace = true, features = ["global_register"] }
+
 [build-dependencies]
 protobuf-codegen = { workspace = true }
 protoc-bin-vendored = { workspace = true }
