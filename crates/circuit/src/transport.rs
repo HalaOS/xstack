@@ -1,5 +1,6 @@
 use std::{
     collections::VecDeque,
+    ops::Deref,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -7,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use futures::{lock::Mutex, TryStreamExt};
+use futures::{lock::Mutex, StreamExt, TryStreamExt};
 use futures_map::KeyWaitMap;
 use rasi::task::spawn_ok;
 use xstack::{
@@ -19,7 +20,7 @@ use xstack::{
 };
 use xstack_tls::{create_ssl_acceptor, SslAcceptor, TlsConn};
 
-use crate::{CircuitV2Rpc, Result, PROTOCOL_CIRCUIT_RELAY_STOP};
+use crate::{CircuitV2Rpc, Result, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP};
 
 /// The implementation of transport [**circuit_v2**].
 ///
@@ -153,6 +154,14 @@ struct CircuitTransportState {
     event_map: Arc<KeyWaitMap<CircuitEvent, ()>>,
 }
 
+impl Deref for CircuitTransportState {
+    type Target = Switch;
+
+    fn deref(&self) -> &Self::Target {
+        &self.switch
+    }
+}
+
 impl CircuitTransportState {
     async fn close(&self) {
         self.raw.lock().await.close().await;
@@ -199,7 +208,32 @@ impl CircuitHopClient {
         );
     }
 
-    async fn run_loop(self) {}
+    async fn run_loop(mut self) {
+        if let Err(err) = self.run_loop_prv().await {
+            log::error!("stop_server, stopped with error: {}", err);
+        } else {
+            log::error!("stop_server, stopped.");
+        }
+
+        self.state.close().await;
+    }
+
+    async fn run_loop_prv(&mut self) -> Result<()> {
+        while let Some(peer_id) = self.event_source.next().await {
+            if let Some(peer_info) = self.state.lookup_peer_info(&peer_id).await? {
+                if peer_info
+                    .protos
+                    .iter()
+                    .find(|proto| proto.as_str() == PROTOCOL_CIRCUIT_RELAY_HOP)
+                    .is_some()
+                {
+                    log::trace!("find circuit_v2/hop node, {}", peer_id);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

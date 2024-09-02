@@ -81,7 +81,7 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
                         return Err(crate::Error::HotReject(format!("{:?}", status)));
                     }
                 }
-                None => return Err(crate::Error::HotReject("status field is null".to_owned())),
+                _ => return Err(crate::Error::HotReject("status field is null".to_owned())),
             }
 
             if let Some(reservation) = message.reservation.into_option() {
@@ -139,7 +139,7 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
                         return Err(crate::Error::HotReject(format!("{:?}", status)));
                     }
                 }
-                None => return Err(crate::Error::HotReject("status field is null".to_owned())),
+                _ => return Err(crate::Error::HotReject("status field is null".to_owned())),
             }
 
             Ok(message.limit.into_option().map(|limit| limit.into()))
@@ -180,7 +180,7 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
                         return Err(crate::Error::HotReject(format!("{:?}", status)));
                     }
                 }
-                None => return Err(crate::Error::HotReject("status field is null".to_owned())),
+                _ => return Err(crate::Error::HotReject("status field is null".to_owned())),
             }
 
             Ok(())
