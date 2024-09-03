@@ -295,7 +295,7 @@ impl Switch {
 
         log::trace!("{}, call transport driver", raddr);
 
-        let mut conn = transport.connect(raddr, self.clone()).await?;
+        let mut conn = transport.connect(self, raddr).await?;
 
         log::trace!("{}, transport connection established", raddr);
 
@@ -389,7 +389,7 @@ impl Switch {
             .get_transport_by_address(laddr)
             .ok_or(Error::UnspportMultiAddr(laddr.to_owned()))?;
 
-        let listener = transport.bind(laddr, self.clone()).await?;
+        let listener = transport.bind(self, laddr).await?;
 
         let laddr = listener.local_addr()?;
 

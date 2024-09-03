@@ -18,7 +18,7 @@ pub struct TcpTransport;
 
 #[async_trait]
 impl DriverTransport for TcpTransport {
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener> {
+    async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
         let listener = TcpListener::bind(laddr.to_sockaddr()?).await?;
 
         let local_addr = listener.local_addr()?;
@@ -51,7 +51,7 @@ impl DriverTransport for TcpTransport {
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(&self, raddr: &Multiaddr, switch: Switch) -> Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection> {
         let stream = TcpStream::connect(raddr.to_sockaddr()?).await?;
 
         let local_addr = stream.local_addr()?;

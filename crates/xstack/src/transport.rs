@@ -112,10 +112,10 @@ pub mod transport_syscall {
     #[async_trait]
     pub trait DriverTransport: Send + Sync {
         /// Create a server-side socket with provided [`laddr`](Multiaddr).
-        async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener>;
+        async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener>;
 
         /// Connect to peer with remote peer [`raddr`](Multiaddr).
-        async fn connect(&self, raddr: &Multiaddr, switch: Switch) -> Result<TransportConnection>;
+        async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection>;
 
         /// Check if this transport support the protocol stack represented by the `addr`.
         fn multiaddr_hit(&self, addr: &Multiaddr) -> bool;

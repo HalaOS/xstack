@@ -98,12 +98,12 @@ impl DnsAddr {
 #[async_trait]
 impl DriverTransport for DnsAddr {
     /// Create a server-side socket with provided [`laddr`](Multiaddr).
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener> {
+    async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
         panic!("DnsAddr is not support for `DriverTransport::bind` fn.");
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(&self, raddr: &Multiaddr, switch: Switch) -> Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection> {
         let mut raddrs = self.lookup(raddr).await?;
 
         if raddrs.is_empty() {

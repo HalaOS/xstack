@@ -55,7 +55,7 @@ pub struct CircuitTransport(AtomicBool);
 #[async_trait]
 impl DriverTransport for CircuitTransport {
     /// Create a server-side socket with provided [`laddr`](Multiaddr).
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> std::io::Result<TransportListener> {
+    async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> std::io::Result<TransportListener> {
         if self
             .0
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
@@ -73,8 +73,8 @@ impl DriverTransport for CircuitTransport {
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
     async fn connect(
         &self,
+        switch: &Switch,
         raddr: &Multiaddr,
-        switch: Switch,
     ) -> std::io::Result<TransportConnection> {
         let peer_addr = raddr.clone();
         let mut raddr = raddr.clone();

@@ -103,7 +103,7 @@ impl Default for QuicTransport {
 
 #[async_trait]
 impl DriverTransport for QuicTransport {
-    async fn bind(&self, laddr: &Multiaddr, switch: Switch) -> Result<TransportListener> {
+    async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
         let quic_config = create_quic_config(switch.keystore(), self.0).await?;
 
         let laddrs = laddr.to_sockaddr()?;
@@ -116,7 +116,7 @@ impl DriverTransport for QuicTransport {
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(&self, raddr: &Multiaddr, switch: Switch) -> Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection> {
         let mut quic_config = create_quic_config(switch.keystore(), self.0).await?;
 
         let raddr = raddr.to_sockaddr()?;
