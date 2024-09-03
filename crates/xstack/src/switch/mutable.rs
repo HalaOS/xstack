@@ -1,6 +1,5 @@
 use std::collections::{HashMap, VecDeque};
 
-use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 
 use crate::{
@@ -9,15 +8,11 @@ use crate::{
     Error, Result, TransportConnection,
 };
 
-use super::{
-    pool::ConnPool, AutoNAT, ListenerId, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING,
-    PROTOCOL_IPFS_PUSH_ID,
-};
+use super::{AutoNAT, ListenerId, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING, PROTOCOL_IPFS_PUSH_ID};
 
 #[derive(Default)]
 pub(super) struct MutableSwitch {
     early_inbound_stream_cached_size: usize,
-    conn_pool: ConnPool,
     inbound_streams: HashMap<ListenerId, VecDeque<(ProtocolStream, String)>>,
     laddrs: Vec<Multiaddr>,
     nat_addrs: Vec<Multiaddr>,
@@ -28,10 +23,9 @@ pub(super) struct MutableSwitch {
 }
 
 impl MutableSwitch {
-    pub(super) fn new(max_pool_size: usize, early_inbound_stream_cached_size: usize) -> Self {
+    pub(super) fn new(early_inbound_stream_cached_size: usize) -> Self {
         Self {
             early_inbound_stream_cached_size,
-            conn_pool: ConnPool::new(max_pool_size),
             ..Default::default()
         }
     }
@@ -157,14 +151,12 @@ impl MutableSwitch {
     }
 
     /// Put a new connecton instance into the pool, and update indexers.
-    pub(super) fn conn_handshake_succ(&mut self, conn: TransportConnection, pin: bool) {
+    pub(super) fn conn_handshake_succ(&mut self, conn: TransportConnection) {
         if let Some(streams) = self.unauth_inbound_streams.remove(conn.id()) {
             for (stream, proto) in streams {
                 self.insert_inbound_stream(stream, proto);
             }
         }
-
-        self.conn_pool.put(conn, pin)
     }
     /// Insert a new inbound stream from an unauthenticated connection.
     ///
@@ -207,15 +199,6 @@ impl MutableSwitch {
 
     pub(super) fn new_listener<E: Event>(&mut self, buffer: usize) -> EventSource<E> {
         self.event_mediator.new_listener(buffer)
-    }
-
-    pub(super) fn get_conn(&self, peer_id: &PeerId) -> Option<Vec<TransportConnection>> {
-        self.conn_pool.get(peer_id)
-    }
-
-    pub(super) fn remove_conn(&mut self, conn: &TransportConnection) {
-        self.unauth_inbound_streams.remove(conn.id());
-        self.conn_pool.remove(conn)
     }
 
     pub(super) fn auto_nat(&self) -> AutoNAT {

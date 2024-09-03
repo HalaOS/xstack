@@ -132,6 +132,7 @@ impl RawConnPool {
 }
 
 /// The default [`Connector`] implementation for `Switch`.
+#[derive(Default)]
 pub struct ConnPool {
     raw: Arc<Mutex<RawConnPool>>,
 }

@@ -6,17 +6,16 @@ use multiaddr::Multiaddr;
 
 use crate::{
     book::{peerbook_syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
+    connector_syscall::DriverConnector,
     keystore::{keystore_syscall::DriverKeyStore, KeyStore, MemoryKeyStore},
     transport::{transport_syscall::DriverTransport, Transport},
-    Error, Result,
+    ConnPool, Connector, Error, Result,
 };
 
 use super::{mutable::MutableSwitch, Switch};
 
 /// immutable context data for one switch.
 pub(super) struct ImmutableSwitch {
-    /// The maximun size of active connections pool size.
-    pub(super) max_conn_pool_size: usize,
     /// The value of rpc timeout.
     pub(super) timeout: Duration,
     /// This is a free-form string, identitying the implementation of the peer. The usual format is agent-name/version,
@@ -30,18 +29,20 @@ pub(super) struct ImmutableSwitch {
     pub(super) keystore: KeyStore,
     /// Peer book for this switch.
     pub(super) peer_book: PeerBook,
+    /// Connector for this switch.
+    pub(super) connector: Connector,
 }
 
 impl ImmutableSwitch {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
-            max_conn_pool_size: 20,
             agent_version,
             timeout: Duration::from_secs(10),
             max_packet_size: 1024 * 1024 * 4,
             transports: vec![],
             keystore: MemoryKeyStore::random().into(),
             peer_book: MemoryPeerBook::default().into(),
+            connector: ConnPool::default().into(),
         }
     }
 
@@ -73,10 +74,13 @@ impl SwitchBuilder {
             }),
         }
     }
-    /// Set the `max_conn_pool_size`, the default value is `20`
-    pub fn max_conn_pool_size(self, value: usize) -> Self {
+    /// /// Replace default [`ConnPool`].
+    pub fn connector<C>(self, value: C) -> Self
+    where
+        C: DriverConnector + 'static,
+    {
         self.and_then(|mut cfg| {
-            cfg.immutable.max_conn_pool_size = value;
+            cfg.immutable.connector = value.into();
 
             Ok(cfg)
         })
@@ -177,7 +181,6 @@ impl SwitchBuilder {
             local_peer_id: Arc::new(public_key.to_peer_id()),
             public_key: Arc::new(public_key),
             mutable: Arc::new(Mutex::new(MutableSwitch::new(
-                ops.immutable.max_conn_pool_size,
                 ops.early_inbound_stream_cached_size,
             ))),
             immutable: Arc::new(ops.immutable),

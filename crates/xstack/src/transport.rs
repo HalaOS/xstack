@@ -228,14 +228,6 @@ driver_wrapper!(
 );
 
 impl TransportConnection {
-    /// A wrapper of driver's [`close`](transport_syscall::DriverConnection::close) function.
-    ///
-    /// This function first removes self from [`Switch`] before calling the driver `close` function.
-    pub async fn close(&mut self, switch: &Switch) {
-        switch.remove_conn(self).await;
-        _ = self.as_driver().close().await;
-    }
-
     pub fn clone(&self) -> TransportConnection {
         self.0.clone()
     }

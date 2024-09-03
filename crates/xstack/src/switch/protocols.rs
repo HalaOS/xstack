@@ -127,21 +127,14 @@ impl Switch {
     }
 
     /// Start a "/ipfs/id/1.0.0" handshake.
-    pub(super) async fn identity_request(
-        &self,
-        conn: &mut TransportConnection,
-        pin: bool,
-    ) -> Result<()> {
+    pub(super) async fn identity_request(&self, conn: &mut TransportConnection) -> Result<()> {
         let conn_peer_id = conn.public_key().to_peer_id();
 
         let (stream, _) = conn.connect(["/ipfs/id/1.0.0"]).await?;
 
         match self.identity_push(&conn_peer_id, stream).await {
             Ok(_) => {
-                self.mutable
-                    .lock()
-                    .await
-                    .conn_handshake_succ(conn.clone(), pin);
+                self.mutable.lock().await.conn_handshake_succ(conn.clone());
                 return Ok(());
             }
             Err(err) => {

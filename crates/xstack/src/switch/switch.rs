@@ -4,7 +4,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use super::{immutable::ImmutableSwitch, AutoNAT, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
@@ -15,10 +15,7 @@ use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::listener_select_proto;
 
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    thread_rng,
-};
+use rand::{seq::SliceRandom, thread_rng};
 use rasi::{task::spawn_ok, timer::TimeoutExt};
 
 use crate::{
@@ -143,14 +140,14 @@ impl Switch {
             let this = self.clone();
 
             spawn_ok(async move {
-                if let Err(err) = this.handshake(&mut conn, false).await {
+                if let Err(err) = this.handshake(&mut conn).await {
                     log::error!(
                         "setup connection, peer={}, local={}, err={}",
                         conn.peer_addr(),
                         conn.local_addr(),
                         err
                     );
-                    _ = conn.close(&this).await;
+                    _ = conn.close().await;
                 } else {
                     log::trace!(
                         "setup connection, peer={}, local={}",
@@ -165,7 +162,7 @@ impl Switch {
     }
 
     /// Start a background task to accept inbound stream, and make a identity request to authenticate peer.
-    async fn handshake(&self, conn: &mut TransportConnection, pin: bool) -> Result<()> {
+    async fn handshake(&self, conn: &mut TransportConnection) -> Result<()> {
         self.mutable.lock().await.start_conn_handshake(conn);
 
         let this = self.clone();
@@ -180,7 +177,7 @@ impl Switch {
                     this_conn.local_addr(),
                     err
                 );
-                _ = this_conn.close(&this).await;
+                _ = this_conn.close().await;
             } else {
                 log::info!(
                     "incoming stream loop stopped, peer={}, local={}",
@@ -191,7 +188,7 @@ impl Switch {
         });
 
         // start "/ipfs/id/1.0.0" handshake.
-        self.identity_request(conn, pin)
+        self.identity_request(conn)
             .timeout(self.immutable.timeout)
             .await
             .ok_or(Error::Timeout)??;
@@ -283,11 +280,7 @@ impl Switch {
         Ok(())
     }
 
-    async fn transport_connect_prv(
-        &self,
-        raddr: &Multiaddr,
-        pin: bool,
-    ) -> Result<TransportConnection> {
+    async fn transport_connect_prv(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
         let transport = self
             .immutable
             .get_transport_by_address(raddr)
@@ -299,9 +292,9 @@ impl Switch {
 
         log::trace!("{}, transport connection established", raddr);
 
-        if let Err(err) = self.handshake(&mut conn, pin).await {
+        if let Err(err) = self.handshake(&mut conn).await {
             log::error!("{}, setup error: {}", raddr, err);
-            _ = conn.close(self).await;
+            _ = conn.close().await;
         } else {
             log::trace!("{}, setup success", raddr);
         }
@@ -313,17 +306,7 @@ impl Switch {
     ///
     /// This function will first check for a local connection cache,
     /// and if there is one, it will directly return the cached connection
-    async fn transport_connect_to(&self, id: &PeerId, pin: bool) -> Result<TransportConnection> {
-        log::trace!("{}, connect", id);
-
-        if let Some(conns) = self.mutable.lock().await.get_conn(id) {
-            if !conns.is_empty() {
-                log::trace!("{}, reused connection in local pool.", id);
-                let conn = conns.into_iter().choose(&mut thread_rng()).unwrap();
-                return Ok(conn);
-            }
-        }
-
+    async fn transport_connect_to(&self, id: &PeerId) -> Result<TransportConnection> {
         let peer_info = self
             .immutable
             .peer_book
@@ -338,14 +321,9 @@ impl Switch {
         addrs.shuffle(&mut thread_rng());
 
         for raddr in addrs {
-            let raddr = match raddr.with_p2p(id.clone()) {
-                Ok(raddr) => raddr,
-                Err(raddr) => raddr,
-            };
-
             log::trace!("connect to {}", raddr);
 
-            match self.transport_connect_prv(&raddr, pin).await {
+            match self.transport_connect_prv(&raddr).await {
                 Ok(conn) => {
                     log::trace!("{}, connect to {}, established", id, raddr);
                     return Ok(conn);
@@ -360,25 +338,6 @@ impl Switch {
         }
 
         Err(last_error.unwrap_or(Error::RoutingPath(id.to_owned())))
-    }
-
-    pub(crate) async fn remove_conn(&self, conn: &TransportConnection) {
-        self.mutable.lock().await.remove_conn(conn);
-
-        let peer_id = conn.public_key().to_peer_id();
-
-        if let Err(err) = self
-            .immutable
-            .peer_book
-            .disappear(&peer_id, SystemTime::now())
-            .await
-        {
-            log::error!(
-                "Failed to update peer's disappearance timestamp, id={}, err={}",
-                peer_id,
-                err
-            );
-        }
     }
 
     /// Create a new transport layer socket that accepts peer's inbound connections.
@@ -424,11 +383,7 @@ impl Switch {
     /// if exists then check for a local connection cache.
     ///
     /// if the parameter pin is true, the `Switch` will not drop the created connection when the connection pool is doing garbage collect
-    pub async fn transport_connect(
-        &self,
-        raddr: &Multiaddr,
-        pin: bool,
-    ) -> Result<TransportConnection> {
+    pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
         log::trace!("{}, try establish transport connection", raddr);
 
         if let Some(peer_id) = self.lookup_peer_id(raddr).await? {
@@ -438,10 +393,10 @@ impl Switch {
                 peer_id
             );
 
-            return self.transport_connect_to(&peer_id, pin).await;
+            return self.transport_connect_to(&peer_id).await;
         }
 
-        self.transport_connect_prv(raddr, pin).await
+        self.transport_connect_prv(raddr).await
     }
 
     /// Create a protocol layer server-side socket, that accept inbound [`ProtocolStream`].
@@ -471,10 +426,10 @@ impl Switch {
             .try_into()
             .map_err(|err| Error::Other(format!("{:?}", err)))?
         {
-            ConnectTo::PeerIdRef(peer_id) => self.transport_connect_to(peer_id, false).await?,
-            ConnectTo::MultiaddrRef(raddr) => self.transport_connect(raddr, false).await?,
-            ConnectTo::PeerId(peer_id) => self.transport_connect_to(&peer_id, false).await?,
-            ConnectTo::Multiaddr(raddr) => self.transport_connect(&raddr, false).await?,
+            ConnectTo::PeerIdRef(peer_id) => self.transport_connect_to(peer_id).await?,
+            ConnectTo::MultiaddrRef(raddr) => self.transport_connect(raddr).await?,
+            ConnectTo::PeerId(peer_id) => self.transport_connect_to(&peer_id).await?,
+            ConnectTo::Multiaddr(raddr) => self.transport_connect(&raddr).await?,
         };
 
         log::trace!("open stream, conn_id={}", conn.id());
