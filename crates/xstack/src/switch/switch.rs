@@ -329,7 +329,7 @@ impl Switch {
             .peer_book
             .get(id)
             .await?
-            .ok_or(Error::ConnectPeer(id.clone()))?;
+            .ok_or(Error::RoutingPath(id.clone()))?;
 
         let mut last_error = None;
 
@@ -359,7 +359,7 @@ impl Switch {
             }
         }
 
-        Err(last_error.unwrap_or(Error::ConnectPeer(id.to_owned())))
+        Err(last_error.unwrap_or(Error::RoutingPath(id.to_owned())))
     }
 
     pub(crate) async fn remove_conn(&self, conn: &TransportConnection) {

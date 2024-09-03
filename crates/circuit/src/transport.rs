@@ -91,6 +91,8 @@ impl DriverTransport for CircuitTransport {
             return Err(Error::ConnectAddr.into());
         };
 
+        log::trace!("circuit_v2, connect to hop={:?}", raddr);
+
         let (mut stream, _) = switch.connect(&raddr, [PROTOCOL_CIRCUIT_RELAY_HOP]).await?;
 
         let limits =
@@ -102,6 +104,8 @@ impl DriverTransport for CircuitTransport {
         let local_addr = stream.local_addr().clone();
 
         let conn = TlsConn::connect(&switch, stream, local_addr, peer_addr).await?;
+
+        log::trace!("circuit_v2, connection handshaked");
 
         Ok(conn.into())
     }
@@ -403,10 +407,10 @@ mod tests {
     use std::{sync::Once, time::Instant};
 
     use futures::{AsyncReadExt, AsyncWriteExt};
-    use rand::{thread_rng, RngCore};
+    use rand::{seq::IteratorRandom, thread_rng, RngCore};
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 
-    use xstack::{PeerInfo, PROTOCOL_IPFS_PING};
+    use xstack::PROTOCOL_IPFS_PING;
     use xstack_autonat::AutoNatClient;
     use xstack_dnsaddr::DnsAddr;
     use xstack_kad::KademliaRouter;
@@ -478,22 +482,13 @@ mod tests {
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
 
-        // log::trace!("add circuit addresses={:#?}", addrs);
+        log::trace!("add circuit addresses={:#?}", addrs);
 
-        let peer_info = PeerInfo {
-            id: peer_info.id,
-            addrs,
-            ..Default::default()
-        };
-
-        switch.insert_peer_info(peer_info).await.unwrap();
+        let choosed = addrs.iter().choose(&mut thread_rng()).unwrap();
 
         let now = Instant::now();
 
-        let (mut stream, _) = switch
-            .connect(&peer_id, [PROTOCOL_IPFS_PING])
-            .await
-            .unwrap();
+        let (mut stream, _) = switch.connect(choosed, [PROTOCOL_IPFS_PING]).await.unwrap();
 
         log::trace!(
             "circuit_v2 connect peer_id={}: times={:?}, raddr={}",

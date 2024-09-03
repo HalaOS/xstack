@@ -11,8 +11,8 @@ pub enum Error {
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 
-    #[error("Connect to peer, id={0}, error='route path is not exists'")]
-    ConnectPeer(PeerId),
+    #[error("Routing path does not exist: {0}")]
+    RoutingPath(PeerId),
 
     #[error(transparent)]
     UnsignedVarint(#[from] unsigned_varint::io::ReadError),
