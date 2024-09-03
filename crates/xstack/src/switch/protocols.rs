@@ -8,7 +8,7 @@ use protobuf::Message;
 
 use crate::{
     proto::identity::Identity, Error, EventArgument, PeerInfo, ProtocolStream, Result,
-    TransportConnection,
+    TransportConnection, XStackRpc,
 };
 
 use super::Switch;
@@ -57,25 +57,7 @@ impl Switch {
         conn_peer_id: &PeerId,
         mut stream: ProtocolStream,
     ) -> Result<()> {
-        let identity = {
-            log::trace!("identity_request: read varint length");
-
-            let body_len = unsigned_varint::aio::read_usize(&mut stream).await?;
-
-            log::trace!("identity_request: read varint length");
-
-            if self.immutable.max_packet_size < body_len {
-                return Err(Error::Overflow(self.immutable.max_packet_size));
-            }
-
-            log::trace!("identity_request recv body: {}", body_len);
-
-            let mut buf = vec![0; body_len];
-
-            stream.read_exact(&mut buf).await?;
-
-            Identity::parse_from_bytes(&buf)?
-        };
+        let identity = XStackRpc::xstack_recv_identity(&mut stream, self.max_packet_size()).await?;
 
         let pubkey = PublicKey::try_decode_protobuf(identity.publicKey())?;
 
@@ -130,7 +112,7 @@ impl Switch {
     pub(super) async fn identity_request(&self, conn: &mut TransportConnection) -> Result<()> {
         let conn_peer_id = conn.public_key().to_peer_id();
 
-        let (stream, _) = conn.connect(["/ipfs/id/1.0.0"]).await?;
+        let (stream, _) = conn.connect([PROTOCOL_IPFS_ID]).await?;
 
         match self.identity_push(&conn_peer_id, stream).await {
             Ok(_) => {

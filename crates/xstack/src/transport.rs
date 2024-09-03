@@ -240,7 +240,7 @@ impl TransportConnection {
     {
         let mut stream = self.as_driver().connect().await?;
 
-        let (id, _) = dialer_select_proto(&mut stream, protocols, Version::V1Lazy).await?;
+        let (id, _) = dialer_select_proto(&mut stream, protocols, Version::V1).await?;
 
         Ok((stream, id))
     }

@@ -4,7 +4,7 @@ use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use protobuf::Message;
 use rand::{thread_rng, RngCore};
 
-use crate::{Error, Result};
+use crate::{proto::identity::Identity, Error, Result};
 
 /// An extension trait for libp2p rpc calls.
 pub trait XStackRpc: AsyncRead + AsyncWrite + Unpin {
@@ -110,6 +110,34 @@ pub trait XStackRpc: AsyncRead + AsyncWrite + Unpin {
             }
 
             Ok(())
+        }
+    }
+
+    fn xstack_recv_identity(
+        mut self,
+        max_packet_size: usize,
+    ) -> impl Future<Output = Result<Identity>>
+    where
+        Self: Sized,
+    {
+        async move {
+            log::trace!("identity_request: read varint length");
+
+            let body_len = unsigned_varint::aio::read_usize(&mut self).await?;
+
+            log::trace!("identity_request: read varint length");
+
+            if max_packet_size < body_len {
+                return Err(Error::Overflow(body_len));
+            }
+
+            log::trace!("identity_request recv body: {}", body_len);
+
+            let mut buf = vec![0; body_len];
+
+            self.read_exact(&mut buf).await?;
+
+            Ok(Identity::parse_from_bytes(&buf)?)
         }
     }
 }
