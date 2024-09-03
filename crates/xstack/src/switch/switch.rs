@@ -13,7 +13,7 @@ use futures::{lock::Mutex, TryStreamExt};
 use futures_map::KeyWaitMap;
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
-use multistream_select::{dialer_select_proto, listener_select_proto, Version};
+use multistream_select::listener_select_proto;
 
 use rand::{
     seq::{IteratorRandom, SliceRandom},
@@ -460,7 +460,7 @@ impl Switch {
         &self,
         target: C,
         protos: I,
-    ) -> Result<(ProtocolStream, String)>
+    ) -> Result<(ProtocolStream, I::Item)>
     where
         C: TryInto<ConnectTo<'a>, Error = E>,
         I: IntoIterator,
@@ -478,16 +478,8 @@ impl Switch {
         };
 
         log::trace!("open stream, conn_id={}", conn.id());
-        let mut stream = conn.connect().await?;
 
-        log::trace!("dial select proto, conn_id={}", conn.id());
-
-        let (protocol_id, _) = dialer_select_proto(&mut stream, protos, Version::V1)
-            .timeout(self.immutable.timeout)
-            .await
-            .ok_or(Error::Timeout)??;
-
-        Ok((stream, protocol_id.as_ref().to_owned()))
+        Ok(conn.connect(protos).await?)
     }
 }
 

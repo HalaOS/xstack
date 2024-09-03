@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
-use multistream_select::{dialer_select_proto, Version};
+
 use protobuf::Message;
 
 use crate::{
@@ -132,11 +132,9 @@ impl Switch {
         conn: &mut TransportConnection,
         pin: bool,
     ) -> Result<()> {
-        let mut stream = conn.connect().await?;
-
         let conn_peer_id = conn.public_key().to_peer_id();
 
-        dialer_select_proto(&mut stream, ["/ipfs/id/1.0.0"], Version::V1).await?;
+        let (stream, _) = conn.connect(["/ipfs/id/1.0.0"]).await?;
 
         match self.identity_push(&conn_peer_id, stream).await {
             Ok(_) => {

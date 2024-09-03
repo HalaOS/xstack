@@ -2,10 +2,10 @@
 
 use std::{io::Result, pin::Pin};
 
-use futures::{stream::unfold, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use rand::{thread_rng, RngCore};
+use futures::{stream::unfold, AsyncRead, AsyncWrite};
+use multistream_select::{dialer_select_proto, Version};
 
-use crate::{driver_wrapper, switch::Switch, Error, PROTOCOL_IPFS_PING};
+use crate::{driver_wrapper, switch::Switch, XStackRpc, PROTOCOL_IPFS_PING};
 
 /// A libp2p transport driver must implement the `Driver-*` traits in this module.
 ///
@@ -239,6 +239,26 @@ impl TransportConnection {
     pub fn clone(&self) -> TransportConnection {
         self.0.clone()
     }
+
+    /// Open a stream via this connection, and negotiate with provided protocol list.
+    pub async fn connect<I>(&mut self, protocols: I) -> Result<(ProtocolStream, I::Item)>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
+        let mut stream = self.as_driver().connect().await?;
+
+        let (id, _) = dialer_select_proto(&mut stream, protocols, Version::V1Lazy).await?;
+
+        Ok((stream, id))
+    }
+
+    /// Make a ping via this connecton.
+    pub async fn ping(&mut self) -> Result<()> {
+        let (stream, _) = self.connect([PROTOCOL_IPFS_PING]).await?;
+
+        Ok(stream.xstack_ping().await?)
+    }
 }
 
 driver_wrapper!(
@@ -253,7 +273,7 @@ impl ProtocolStream {
     pub async fn connect<'a, C, E, I>(
         target: C,
         protos: I,
-    ) -> crate::Result<(ProtocolStream, String)>
+    ) -> crate::Result<(ProtocolStream, I::Item)>
     where
         C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
         I: IntoIterator,
@@ -279,7 +299,7 @@ impl ProtocolStream {
         switch: &Switch,
         target: C,
         protos: I,
-    ) -> crate::Result<(ProtocolStream, String)>
+    ) -> crate::Result<(ProtocolStream, I::Item)>
     where
         C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
         I: IntoIterator,
@@ -295,23 +315,9 @@ impl ProtocolStream {
         C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
         E: std::fmt::Debug,
     {
-        let (mut stream, _) = Self::connect_with(switch, target, [PROTOCOL_IPFS_PING]).await?;
+        let (stream, _) = Self::connect_with(switch, target, [PROTOCOL_IPFS_PING]).await?;
 
-        let mut buf = vec![0u8; 32];
-
-        thread_rng().fill_bytes(&mut buf);
-
-        stream.write_all(&buf).await?;
-
-        let mut echo = vec![0u8; 32];
-
-        stream.read_exact(&mut echo).await?;
-
-        if echo != buf {
-            return Err(Error::Ping);
-        }
-
-        Ok(())
+        stream.xstack_ping().await
     }
 }
 

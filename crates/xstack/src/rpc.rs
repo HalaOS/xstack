@@ -2,6 +2,7 @@ use std::future::Future;
 
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use protobuf::Message;
+use rand::{thread_rng, RngCore};
 
 use crate::{Error, Result};
 
@@ -83,6 +84,30 @@ pub trait XStackRpc: AsyncRead + AsyncWrite + Unpin {
                 .await?;
 
             self.write_all(buf.as_slice()).await?;
+
+            Ok(())
+        }
+    }
+
+    /// Make a ping test via the stream.
+    fn xstack_ping(mut self) -> impl Future<Output = Result<()>>
+    where
+        Self: Sized,
+    {
+        async move {
+            let mut buf = vec![0u8; 32];
+
+            thread_rng().fill_bytes(&mut buf);
+
+            self.write_all(&buf).await?;
+
+            let mut echo = vec![0u8; 32];
+
+            self.read_exact(&mut echo).await?;
+
+            if echo != buf {
+                return Err(Error::Ping);
+            }
 
             Ok(())
         }
