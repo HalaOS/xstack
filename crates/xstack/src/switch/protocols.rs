@@ -21,7 +21,17 @@ pub const PROTOCOL_IPFS_PUSH_ID: &str = "/ipfs/id/push/1.0.0";
 /// protocol name of libp2p ping
 pub const PROTOCOL_IPFS_PING: &str = "/ipfs/ping/1.0.0";
 
+const PROTOCOLS: &[&str] = &[PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PUSH_ID, PROTOCOL_IPFS_PING];
+
 impl Switch {
+    pub(super) fn merge_protos(mut protos: Vec<String>) -> Vec<String> {
+        for proto in PROTOCOLS {
+            protos.push(proto.to_string());
+        }
+
+        protos
+    }
+
     /// Handle `/ipfs/ping/1.0.0` request.
     pub(super) async fn ping_echo(&self, mut stream: ProtocolStream) -> Result<()> {
         loop {

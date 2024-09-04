@@ -7,7 +7,7 @@ use libp2p_identity::PeerId;
 use multiaddr::{Multiaddr, Protocol};
 use rand::{seq::SliceRandom, thread_rng};
 
-use crate::{driver_wrapper, Switch, Transport, P2pConn};
+use crate::{driver_wrapper, P2pConn, Switch, Transport};
 
 /// Variant returns by [`Connector::connect`] function
 ///
@@ -29,7 +29,7 @@ pub mod connector_syscall {
     use async_trait::async_trait;
     use multiaddr::Multiaddr;
 
-    use crate::{Switch, Transport, P2pConn};
+    use crate::{P2pConn, Switch, Transport};
 
     use super::Connected;
 
@@ -147,9 +147,10 @@ impl connector_syscall::DriverConnector for ConnPool {
     ) -> Result<Connected> {
         // first, try get connection in the pool.
         if let Some(conn) = self.reuse_connect(raddr).await {
-            return Ok(Connected::New(conn));
+            return Ok(Connected::Authenticated(conn));
         }
 
+        log::trace!("connect to {}, new", raddr);
         Ok(Connected::New(transport.connect(switch, raddr).await?))
     }
 
@@ -173,6 +174,7 @@ impl connector_syscall::DriverConnector for ConnPool {
                     continue;
                 }
 
+                log::trace!("connect to {}, reused {}", raddr, conn.peer_addr());
                 return Some(conn);
             }
         }

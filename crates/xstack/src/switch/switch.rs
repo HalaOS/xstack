@@ -73,6 +73,8 @@ impl Switch {
                         conn.peer_addr(),
                         conn.local_addr()
                     );
+
+                    this.connector.authenticated(conn, true).await;
                 }
             })
         }
@@ -135,7 +137,7 @@ impl Switch {
             stream.id()
         );
 
-        let protos = self.ops.stream_dispatcher.protos().await;
+        let protos = Self::merge_protos(self.ops.stream_dispatcher.protos().await);
 
         let (protoco_id, _) = listener_select_proto(&mut stream, &protos)
             .timeout(self.ops.timeout)
@@ -204,9 +206,11 @@ impl Switch {
             .get_transport_by_address(raddr)
             .ok_or(Error::UnspportMultiAddr(raddr.to_owned()))?;
 
-        log::trace!("{}, call transport driver", raddr);
+        log::trace!("{}, connector::connect", raddr);
 
         let connected = self.ops.connector.connect(self, transport, raddr).await?;
+
+        log::trace!("{}, connector::connect returned.", raddr);
 
         let conn = match connected {
             crate::Connected::New(mut conn) => {
@@ -229,6 +233,7 @@ impl Switch {
                     return Err(err);
                 } else {
                     log::trace!("{}, setup success", raddr);
+                    self.connector.authenticated(conn.clone(), false).await;
                     conn
                 }
             }
