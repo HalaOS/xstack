@@ -4,7 +4,9 @@ use std::{fmt::Debug, sync::Arc};
 use super::SwitchBuilder;
 use super::{builder::SwitchOptions, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
+use futures::StreamExt;
 use futures::{lock::Mutex, TryStreamExt};
+use futures_map::FuturesWaitMap;
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::listener_select_proto;
@@ -259,19 +261,34 @@ impl Switch {
 
         raddrs.shuffle(&mut thread_rng());
 
+        let mut concurrency_connct = FuturesWaitMap::<Multiaddr, Result<P2pConn>>::new();
+
+        let tasks = raddrs.len();
+
         for raddr in raddrs {
             log::trace!("connect to {}", raddr);
 
-            match self.transport_connect_prv(&raddr).await {
-                Ok(conn) => {
+            let this = self.clone();
+
+            concurrency_connct.insert(raddr.clone(), async move {
+                this.transport_connect_prv(&raddr).await
+            });
+        }
+
+        for _ in 0..tasks {
+            match concurrency_connct.next().await {
+                Some((raddr, Ok(conn))) => {
                     log::trace!("connect to {}, established", raddr);
                     return Ok(conn);
                 }
-                Err(err) => {
+                Some((raddr, Err(err))) => {
                     last_error = {
                         log::trace!("connect to {}, error: {}", raddr, err);
                         Some(err)
                     }
+                }
+                None => {
+                    break;
                 }
             }
         }
