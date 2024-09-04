@@ -3,6 +3,7 @@
 use std::{io::Result, pin::Pin};
 
 use futures::{stream::unfold, AsyncRead, AsyncWrite};
+use libp2p_identity::PeerId;
 use multistream_select::{dialer_select_proto, Version};
 
 use crate::{driver_wrapper, switch::Switch, XStackRpc, PROTOCOL_IPFS_PING};
@@ -115,7 +116,7 @@ pub mod transport_syscall {
         async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener>;
 
         /// Connect to peer with remote peer [`raddr`](Multiaddr).
-        async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection>;
+        async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn>;
 
         /// Check if this transport support the protocol stack represented by the `addr`.
         fn multiaddr_hit(&self, addr: &Multiaddr) -> bool;
@@ -125,7 +126,7 @@ pub mod transport_syscall {
     #[async_trait]
     pub trait DriverListener: Sync + Sync {
         /// Accept next incoming connection between local and peer.
-        async fn accept(&mut self) -> Result<TransportConnection>;
+        async fn accept(&mut self) -> Result<P2pConn>;
 
         /// Returns the local address that this listener is bound to.
         fn local_addr(&self) -> Result<Multiaddr>;
@@ -159,7 +160,7 @@ pub mod transport_syscall {
         fn is_closed(&self) -> bool;
 
         /// Creates a new independently owned handle to the underlying socket.
-        fn clone(&self) -> TransportConnection;
+        fn clone(&self) -> P2pConn;
 
         /// Returns the count of active stream.
         fn actives(&self) -> usize;
@@ -214,7 +215,7 @@ driver_wrapper!(
 );
 
 impl TransportListener {
-    pub fn into_incoming(self) -> impl futures::Stream<Item = Result<TransportConnection>> + Unpin {
+    pub fn into_incoming(self) -> impl futures::Stream<Item = Result<P2pConn>> + Unpin {
         Box::pin(unfold(self, |mut listener| async move {
             let res = listener.accept().await;
             Some((res, listener))
@@ -224,11 +225,11 @@ impl TransportListener {
 
 driver_wrapper!(
     ["A type wrapper of [`DriverConnection`](transport_syscall::DriverConnection)"]
-    TransportConnection[transport_syscall::DriverConnection]
+    P2pConn[transport_syscall::DriverConnection]
 );
 
-impl TransportConnection {
-    pub fn clone(&self) -> TransportConnection {
+impl P2pConn {
+    pub fn clone(&self) -> P2pConn {
         self.0.clone()
     }
 
@@ -251,6 +252,18 @@ impl TransportConnection {
 
         Ok(stream.xstack_ping().await?)
     }
+}
+
+/// The state of transport connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum P2pConnState {
+    Connected { id: String, peer_id: PeerId },
+
+    HandshakeSuccess { id: String, peer_id: PeerId },
+
+    HandshakeFailed { id: String, peer_id: PeerId },
+
+    Disconnected { id: String, peer_id: PeerId },
 }
 
 driver_wrapper!(

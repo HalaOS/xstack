@@ -15,8 +15,8 @@ use xstack::{
     events::Connected,
     multiaddr::{Multiaddr, Protocol},
     transport_syscall::{DriverListener, DriverTransport},
-    AutoNAT, EventSource, ProtocolListener, ProtocolListenerState, ProtocolStream, Switch,
-    TransportConnection, TransportListener,
+    AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolListenerCloser, ProtocolStream,
+    Switch, TransportListener,
 };
 use xstack_tls::{create_ssl_acceptor, SslAcceptor, TlsConn};
 
@@ -71,11 +71,7 @@ impl DriverTransport for CircuitTransport {
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(
-        &self,
-        switch: &Switch,
-        raddr: &Multiaddr,
-    ) -> std::io::Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> std::io::Result<P2pConn> {
         let peer_addr = raddr.clone();
         let mut raddr = raddr.clone();
 
@@ -140,12 +136,12 @@ enum CircuitEvent {
 
 #[derive(Default)]
 struct RawCircuitTransportState {
-    proto_listener: Option<ProtocolListenerState>,
-    incoming_conn: VecDeque<TransportConnection>,
+    proto_listener: Option<ProtocolListenerCloser>,
+    incoming_conn: VecDeque<P2pConn>,
 }
 
 impl RawCircuitTransportState {
-    fn next_incoming(&mut self) -> Option<TransportConnection> {
+    fn next_incoming(&mut self) -> Option<P2pConn> {
         self.incoming_conn.pop_front()
     }
 
@@ -164,7 +160,7 @@ impl RawCircuitTransportState {
         self.incoming_conn.clear();
     }
 
-    fn inbound(&mut self, conn: TransportConnection) -> bool {
+    fn inbound(&mut self, conn: P2pConn) -> bool {
         if self.is_closed() {
             return false;
         }
@@ -197,7 +193,7 @@ impl CircuitTransportState {
     }
 
     /// Accept next incoming connection between local and peer.
-    async fn accept(&mut self) -> std::io::Result<TransportConnection> {
+    async fn accept(&mut self) -> std::io::Result<P2pConn> {
         loop {
             let mut raw = self.raw.lock().await;
 
@@ -279,7 +275,7 @@ impl CircuitStopServer {
         let state = CircuitTransportState {
             switch: switch.clone(),
             raw: Arc::new(Mutex::new(RawCircuitTransportState {
-                proto_listener: Some(listener.to_state()),
+                proto_listener: Some(listener.to_closer()),
                 ..Default::default()
             })),
             event_map: Default::default(),
@@ -391,7 +387,7 @@ impl CircuitListener {
 #[async_trait]
 impl DriverListener for CircuitListener {
     /// Accept next incoming connection between local and peer.
-    async fn accept(&mut self) -> std::io::Result<TransportConnection> {
+    async fn accept(&mut self) -> std::io::Result<P2pConn> {
         self.state.accept().await
     }
 

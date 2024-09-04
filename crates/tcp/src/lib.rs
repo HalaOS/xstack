@@ -10,7 +10,7 @@ use rasi::net::{TcpListener, TcpStream};
 use xstack::multiaddr::{Multiaddr, Protocol, ToSockAddr};
 use xstack::transport_syscall::DriverTransport;
 use xstack::Switch;
-use xstack::{TransportConnection, TransportListener};
+use xstack::{P2pConn, TransportListener};
 use xstack_tls::{TlsConn, TlsListener};
 
 /// The libp2p tcp transport implementation.
@@ -51,7 +51,7 @@ impl DriverTransport for TcpTransport {
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn> {
         let stream = TcpStream::connect(raddr.to_sockaddr()?).await?;
 
         let local_addr = stream.local_addr()?;

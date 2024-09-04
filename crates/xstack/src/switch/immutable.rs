@@ -1,18 +1,17 @@
 use std::{sync::Arc, time::Duration};
 
-use futures::lock::Mutex;
-use futures_map::KeyWaitMap;
 use multiaddr::Multiaddr;
 
 use crate::{
     book::{peerbook_syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
     connector_syscall::DriverConnector,
     keystore::{keystore_syscall::DriverKeyStore, KeyStore, MemoryKeyStore},
+    stream_syscall::DriverStreamDispatcher,
     transport::{transport_syscall::DriverTransport, Transport},
-    ConnPool, Connector, Error, Result,
+    ConnPool, Connector, Error, MutexStreamDispatcher, Result, StreamDispatcher,
 };
 
-use super::{mutable::MutableSwitch, Switch};
+use super::Switch;
 
 /// immutable context data for one switch.
 pub(super) struct ImmutableSwitch {
@@ -31,6 +30,8 @@ pub(super) struct ImmutableSwitch {
     pub(super) peer_book: PeerBook,
     /// Connector for this switch.
     pub(super) connector: Connector,
+    /// StreamDispatcher for this switch.
+    pub(super) stream_dispatcher: StreamDispatcher,
 }
 
 impl ImmutableSwitch {
@@ -43,6 +44,7 @@ impl ImmutableSwitch {
             keystore: MemoryKeyStore::random().into(),
             peer_book: MemoryPeerBook::default().into(),
             connector: ConnPool::default().into(),
+            stream_dispatcher: MutexStreamDispatcher::default().into(),
         }
     }
 
@@ -104,6 +106,18 @@ impl SwitchBuilder {
     {
         self.and_then(|mut cfg| {
             cfg.immutable.keystore = value.into();
+
+            Ok(cfg)
+        })
+    }
+
+    /// Replace default [`MutexStreamDispatcher`].
+    pub fn stream_dispatcher<K>(self, value: K) -> Self
+    where
+        K: DriverStreamDispatcher + 'static,
+    {
+        self.and_then(|mut cfg| {
+            cfg.immutable.stream_dispatcher = value.into();
 
             Ok(cfg)
         })
@@ -180,11 +194,8 @@ impl SwitchBuilder {
         let switch = Switch {
             local_peer_id: Arc::new(public_key.to_peer_id()),
             public_key: Arc::new(public_key),
-            mutable: Arc::new(Mutex::new(MutableSwitch::new(
-                ops.early_inbound_stream_cached_size,
-            ))),
+            mutable: Default::default(),
             immutable: Arc::new(ops.immutable),
-            event_map: Arc::new(KeyWaitMap::new()),
         };
 
         for laddr in ops.laddrs {

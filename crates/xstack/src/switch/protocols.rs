@@ -7,8 +7,8 @@ use multiaddr::Multiaddr;
 use protobuf::Message;
 
 use crate::{
-    proto::identity::Identity, Error, EventArgument, PeerInfo, ProtocolStream, Result,
-    TransportConnection, XStackRpc,
+    proto::identity::Identity, Error, EventArgument, P2pConn, PeerInfo, ProtocolStream, Result,
+    XStackRpc,
 };
 
 use super::Switch;
@@ -109,18 +109,24 @@ impl Switch {
     }
 
     /// Start a "/ipfs/id/1.0.0" handshake.
-    pub(super) async fn identity_request(&self, conn: &mut TransportConnection) -> Result<()> {
+    pub(super) async fn identity_request(&self, conn: &mut P2pConn) -> Result<()> {
         let conn_peer_id = conn.public_key().to_peer_id();
 
         let (stream, _) = conn.connect([PROTOCOL_IPFS_ID]).await?;
 
         match self.identity_push(&conn_peer_id, stream).await {
             Ok(_) => {
-                self.mutable.lock().await.conn_handshake_succ(conn.clone());
+                self.immutable
+                    .stream_dispatcher
+                    .handshake_success(conn.id())
+                    .await;
                 return Ok(());
             }
             Err(err) => {
-                self.mutable.lock().await.conn_handshake_failed(conn);
+                self.immutable
+                    .stream_dispatcher
+                    .handshake_failed(conn.id())
+                    .await;
                 return Err(err);
             }
         }
@@ -146,7 +152,7 @@ impl Switch {
             .map(|addr| addr.to_vec())
             .collect::<Vec<_>>();
 
-        identity.protocols = self.mutable.lock().await.protos();
+        identity.protocols = self.immutable.stream_dispatcher.protos().await;
 
         let buf = identity.write_to_bytes()?;
 

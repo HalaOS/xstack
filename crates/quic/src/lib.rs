@@ -28,7 +28,7 @@ use xstack::{
     identity::PublicKey,
     multiaddr::{Multiaddr, Protocol, ToSockAddr},
     transport_syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport},
-    KeyStore, ProtocolStream, Switch, TransportConnection, TransportListener,
+    KeyStore, ProtocolStream, Switch, P2pConn, TransportListener,
 };
 
 async fn create_quic_config(host_key: &KeyStore, timeout: Duration) -> io::Result<Config> {
@@ -116,7 +116,7 @@ impl DriverTransport for QuicTransport {
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn> {
         let mut quic_config = create_quic_config(switch.keystore(), self.0).await?;
 
         let raddr = raddr.to_sockaddr()?;
@@ -180,7 +180,7 @@ impl QuicP2pListener {
 #[async_trait]
 impl DriverListener for QuicP2pListener {
     /// Accept next incoming connection between local and peer.
-    async fn accept(&mut self) -> Result<TransportConnection> {
+    async fn accept(&mut self) -> Result<P2pConn> {
         let conn = self.listener.accept().await?;
 
         let cert = conn.peer_cert().await.ok_or(io::Error::new(
@@ -305,7 +305,7 @@ impl DriverConnection for QuicP2pConn {
     }
 
     /// Creates a new independently owned handle to the underlying socket.
-    fn clone(&self) -> TransportConnection {
+    fn clone(&self) -> P2pConn {
         Clone::clone(self).into()
     }
 

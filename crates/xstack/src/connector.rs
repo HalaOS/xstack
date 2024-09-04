@@ -7,18 +7,18 @@ use libp2p_identity::PeerId;
 use multiaddr::{Multiaddr, Protocol};
 use rand::{seq::SliceRandom, thread_rng};
 
-use crate::{driver_wrapper, Switch, Transport, TransportConnection};
+use crate::{driver_wrapper, Switch, Transport, P2pConn};
 
 /// Variant returns by [`Connector::connect`] function
 ///
 /// [`Connector::connect`]: connector_syscall::DriverConnector::connect
 pub enum Connected {
     ///  The new established connection, that has not complete handshake.
-    New(TransportConnection),
+    New(P2pConn),
 
     /// The connection with a successful handshake,
     /// generally this connection is handled by a `Connector`.
-    Authenticated(TransportConnection),
+    Authenticated(P2pConn),
 }
 
 /// A `Connector` driver must implement the `Driver-*` traits in this module.
@@ -29,7 +29,7 @@ pub mod connector_syscall {
     use async_trait::async_trait;
     use multiaddr::Multiaddr;
 
-    use crate::{Switch, Transport, TransportConnection};
+    use crate::{Switch, Transport, P2pConn};
 
     use super::Connected;
 
@@ -44,10 +44,10 @@ pub mod connector_syscall {
         ) -> Result<Connected>;
 
         /// Try reuse connection from the cache pool.
-        async fn reuse_connect(&self, raddr: &Multiaddr) -> Option<TransportConnection>;
+        async fn reuse_connect(&self, raddr: &Multiaddr) -> Option<P2pConn>;
 
         /// Put a connection with a successful handshake back into the connector pool.
-        async fn authenticated(&self, conn: TransportConnection, inbound: bool);
+        async fn authenticated(&self, conn: P2pConn, inbound: bool);
     }
 }
 
@@ -63,12 +63,12 @@ struct RawConnPool {
     /// The mapping from peer_id to connection id list.
     peers: HashMap<PeerId, Vec<String>>,
     /// The mapping from connection id to connection.
-    conns: HashMap<String, TransportConnection>,
+    conns: HashMap<String, P2pConn>,
 }
 
 impl RawConnPool {
     /// add a authenticated connection into the pool.
-    fn add(&mut self, conn: TransportConnection, inbound: bool) {
+    fn add(&mut self, conn: P2pConn, inbound: bool) {
         let peer_id = conn.public_key().to_peer_id();
 
         // if this is a outbound connection, create the raddr index.
@@ -105,7 +105,7 @@ impl RawConnPool {
         }
     }
 
-    fn by_raddr(&mut self, raddr: &Multiaddr) -> Option<Vec<TransportConnection>> {
+    fn by_raddr(&mut self, raddr: &Multiaddr) -> Option<Vec<P2pConn>> {
         if let Some(peer_id) = self.raddrs.get(raddr) {
             if let Some(ids) = self.peers.get(peer_id) {
                 return Some(
@@ -119,7 +119,7 @@ impl RawConnPool {
         return None;
     }
 
-    fn by_peer_id(&mut self, peer_id: &PeerId) -> Option<Vec<TransportConnection>> {
+    fn by_peer_id(&mut self, peer_id: &PeerId) -> Option<Vec<P2pConn>> {
         if let Some(ids) = self.peers.get(peer_id) {
             return Some(
                 ids.iter()
@@ -153,7 +153,7 @@ impl connector_syscall::DriverConnector for ConnPool {
         Ok(Connected::New(transport.connect(switch, raddr).await?))
     }
 
-    async fn reuse_connect(&self, raddr: &Multiaddr) -> Option<TransportConnection> {
+    async fn reuse_connect(&self, raddr: &Multiaddr) -> Option<P2pConn> {
         let mut raw = self.raw.lock().await;
 
         let conns = if let Some(Protocol::P2p(peer_id)) = raddr.clone().pop() {
@@ -181,7 +181,7 @@ impl connector_syscall::DriverConnector for ConnPool {
     }
 
     /// Put a connection with a successful handshake back into the connector pool.
-    async fn authenticated(&self, conn: TransportConnection, inbound: bool) {
+    async fn authenticated(&self, conn: P2pConn, inbound: bool) {
         self.raw.lock().await.add(conn, inbound);
     }
 }

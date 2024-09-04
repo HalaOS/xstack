@@ -1,16 +1,8 @@
-use std::{
-    fmt::Debug,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use super::{immutable::ImmutableSwitch, AutoNAT, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
 use futures::{lock::Mutex, TryStreamExt};
-use futures_map::KeyWaitMap;
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::listener_select_proto;
@@ -18,44 +10,16 @@ use multistream_select::listener_select_proto;
 use rand::{seq::SliceRandom, thread_rng};
 use rasi::{task::spawn_ok, timer::TimeoutExt};
 
+use crate::StreamDispatcher;
 use crate::{
     book::PeerInfo,
     event::{Event, EventSource},
     keystore::KeyStore,
-    transport::{ProtocolStream, TransportConnection, TransportListener},
-    Error, Result,
+    transport::{P2pConn, ProtocolStream, TransportListener},
+    Error, ProtocolListener, ProtocolListenerId, Result,
 };
 
 pub use super::immutable::SwitchBuilder;
-pub use super::listener::ProtocolListener;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(super) struct ListenerId(usize);
-
-impl From<ListenerId> for usize {
-    fn from(value: ListenerId) -> Self {
-        value.0
-    }
-}
-
-impl From<&ListenerId> for usize {
-    fn from(value: &ListenerId) -> Self {
-        value.0
-    }
-}
-
-impl ListenerId {
-    pub(super) fn next() -> Self {
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-
-        ListenerId(NEXT.fetch_add(1, Ordering::SeqCst))
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub(super) enum SwitchInnerEvent {
-    Accept(ListenerId),
-}
 
 /// Variant type used by [`connect`](Switch::connect) function.
 pub enum ConnectTo<'a> {
@@ -115,7 +79,6 @@ pub struct Switch {
     pub(super) local_peer_id: Arc<PeerId>,
     pub(super) immutable: Arc<ImmutableSwitch>,
     pub(super) mutable: Arc<Mutex<MutableSwitch>>,
-    pub(super) event_map: Arc<KeyWaitMap<SwitchInnerEvent, ()>>,
 }
 
 // impl Deref for Switch {
@@ -162,8 +125,8 @@ impl Switch {
     }
 
     /// Start a background task to accept inbound stream, and make a identity request to authenticate peer.
-    async fn handshake(&self, conn: &mut TransportConnection) -> Result<()> {
-        self.mutable.lock().await.start_conn_handshake(conn);
+    async fn handshake(&self, conn: &mut P2pConn) -> Result<()> {
+        self.immutable.stream_dispatcher.handshake(conn.id()).await;
 
         let this = self.clone();
 
@@ -196,7 +159,7 @@ impl Switch {
         Ok(())
     }
 
-    async fn incoming_stream_loop(&self, conn: &mut TransportConnection) -> Result<()> {
+    async fn incoming_stream_loop(&self, conn: &mut P2pConn) -> Result<()> {
         loop {
             let stream = conn.accept().await?;
 
@@ -216,7 +179,7 @@ impl Switch {
             stream.id()
         );
 
-        let protos = self.mutable.lock().await.protos();
+        let protos = self.immutable.stream_dispatcher.protos().await;
 
         let (protoco_id, _) = listener_select_proto(&mut stream, &protos)
             .timeout(self.immutable.timeout)
@@ -259,28 +222,27 @@ impl Switch {
         Ok(())
     }
 
-    async fn dispatch_stream(&self, protoco_id: String, stream: ProtocolStream) -> Result<()> {
+    async fn dispatch_stream(&self, protocol_id: String, stream: ProtocolStream) -> Result<()> {
         let conn_peer_id = stream.public_key().to_peer_id();
 
-        match protoco_id.as_str() {
+        match protocol_id.as_str() {
             PROTOCOL_IPFS_ID => self.identity_response(stream).await?,
             PROTOCOL_IPFS_PUSH_ID => {
                 self.identity_push(&conn_peer_id, stream).await?;
             }
             PROTOCOL_IPFS_PING => self.ping_echo(stream).await?,
             _ => {
-                let mut mutable = self.mutable.lock().await;
-
-                if let Some(id) = mutable.insert_inbound_stream(stream, protoco_id) {
-                    self.event_map.insert(SwitchInnerEvent::Accept(id), ());
-                }
+                self.immutable
+                    .stream_dispatcher
+                    .dispatch(stream, protocol_id)
+                    .await;
             }
         }
 
         Ok(())
     }
 
-    async fn transport_connect_prv(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
+    async fn transport_connect_prv(&self, raddr: &Multiaddr) -> Result<P2pConn> {
         let transport = self
             .immutable
             .get_transport_by_address(raddr)
@@ -306,7 +268,7 @@ impl Switch {
     ///
     /// This function will first check for a local connection cache,
     /// and if there is one, it will directly return the cached connection
-    async fn transport_connect_to(&self, id: &PeerId) -> Result<TransportConnection> {
+    async fn transport_connect_to(&self, id: &PeerId) -> Result<P2pConn> {
         let peer_info = self
             .immutable
             .peer_book
@@ -383,7 +345,7 @@ impl Switch {
     /// if exists then check for a local connection cache.
     ///
     /// if the parameter pin is true, the `Switch` will not drop the created connection when the connection pool is doing garbage collect
-    pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<TransportConnection> {
+    pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<P2pConn> {
         log::trace!("{}, try establish transport connection", raddr);
 
         if let Some(peer_id) = self.lookup_peer_id(raddr).await? {
@@ -405,9 +367,16 @@ impl Switch {
         I: IntoIterator,
         I::Item: AsRef<str>,
     {
-        let id = self.mutable.lock().await.new_protocol_listener(protos)?;
+        let id = ProtocolListenerId::default();
 
-        Ok(ProtocolListener::new(id, self.clone()))
+        let protos = protos
+            .into_iter()
+            .map(|item| item.as_ref().to_owned())
+            .collect::<Vec<_>>();
+
+        self.immutable.stream_dispatcher.bind(id, &protos).await?;
+
+        Ok(ProtocolListener::new(self.clone(), id))
     }
 
     /// Connect to peer and negotiate a protocol. the `protos` is the list of candidate protocols.
@@ -470,6 +439,11 @@ impl Switch {
     /// Get associated keystore instance.
     pub fn keystore(&self) -> &KeyStore {
         &self.immutable.keystore
+    }
+
+    /// Get associated stream dispatcher instance.
+    pub fn stream_dispatcher(&self) -> &StreamDispatcher {
+        &self.immutable.stream_dispatcher
     }
 
     /// Get this switch's public key.

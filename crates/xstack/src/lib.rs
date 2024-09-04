@@ -188,3 +188,6 @@ pub use rpc::*;
 
 mod connector;
 pub use connector::*;
+
+mod stream;
+pub use stream::*;

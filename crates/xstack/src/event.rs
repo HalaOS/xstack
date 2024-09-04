@@ -8,7 +8,7 @@ use futures::{
 };
 use libp2p_identity::PeerId;
 
-use crate::{AutoNAT, Switch};
+use crate::{AutoNAT, P2pConnState, Switch};
 
 /// A trait which switch event type must implement.
 pub trait Event {
@@ -30,6 +30,9 @@ pub enum EventArgument {
 
     /// autonat state changed.
     AutoNAT(AutoNAT),
+
+    /// Connection status changed.
+    ConnState(P2pConnState),
 }
 
 /// A [`Stream`] of event `E`.
@@ -124,6 +127,24 @@ pub mod events {
             }
         }
     }
+
+    /// transport connection state changed event.
+    pub struct P2pConnStateChanged;
+
+    impl Event for P2pConnStateChanged {
+        type Argument = P2pConnState;
+
+        fn name() -> &'static str {
+            "/xstack/event/autonat/1.0.0"
+        }
+
+        fn to_argument(arg: EventArgument) -> Self::Argument {
+            match arg {
+                EventArgument::ConnState(state) => state,
+                _ => panic!("not here"),
+            }
+        }
+    }
 }
 
 #[derive(Default)]
@@ -136,6 +157,7 @@ impl EventMediator {
                 self.notify_inner::<events::Connected>(arg);
             }
             EventArgument::AutoNAT(_) => self.notify_inner::<events::AutoNATChanged>(arg),
+            EventArgument::ConnState(_) => self.notify_inner::<events::P2pConnStateChanged>(arg),
         }
     }
 

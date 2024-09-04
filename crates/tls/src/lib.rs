@@ -26,7 +26,7 @@ use xstack::{
     identity::PublicKey,
     multiaddr::{Multiaddr, ToSockAddr},
     transport_syscall::{DriverConnection, DriverListener, DriverStream},
-    ProtocolStream, Switch, TransportConnection,
+    ProtocolStream, Switch, P2pConn,
 };
 
 pub use futures_boring::ssl::SslAcceptor;
@@ -102,7 +102,7 @@ where
     S: AsyncWrite + AsyncRead + Sync + Send + Unpin + 'static,
 {
     /// Accept next incoming connection between local and peer.
-    async fn accept(&mut self) -> Result<TransportConnection> {
+    async fn accept(&mut self) -> Result<P2pConn> {
         let (stream, raddr) = match self.incoming.try_next().await? {
             Some((stream, raddr)) => (stream, raddr),
             None => {
@@ -286,7 +286,7 @@ impl DriverConnection for TlsConn {
         self.stream_count.load(Ordering::Relaxed)
     }
 
-    fn clone(&self) -> TransportConnection {
+    fn clone(&self) -> P2pConn {
         Clone::clone(self).into()
     }
 

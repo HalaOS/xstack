@@ -25,7 +25,7 @@ use rand::thread_rng;
 use xstack::multiaddr::Multiaddr;
 use xstack::transport_syscall::DriverTransport;
 use xstack::Switch;
-use xstack::{TransportConnection, TransportListener};
+use xstack::{P2pConn, TransportListener};
 
 /// A transport that resolve *name-based* multiaddrs into IP addresses.
 ///
@@ -103,7 +103,7 @@ impl DriverTransport for DnsAddr {
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
-    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<TransportConnection> {
+    async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn> {
         let mut raddrs = self.lookup(raddr).await?;
 
         if raddrs.is_empty() {
