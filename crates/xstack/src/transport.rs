@@ -209,8 +209,10 @@ pub mod transport_syscall {
 pub enum ConnectTo<'a> {
     PeerIdRef(&'a PeerId),
     MultiaddrRef(&'a Multiaddr),
+    MultiaddrsRef(&'a [Multiaddr]),
     PeerId(PeerId),
     Multiaddr(Multiaddr),
+    Multiaddrs(Vec<Multiaddr>),
 }
 
 impl<'a> From<&'a PeerId> for ConnectTo<'a> {
@@ -224,6 +226,11 @@ impl<'a> From<&'a Multiaddr> for ConnectTo<'a> {
         Self::MultiaddrRef(value)
     }
 }
+impl<'a> From<&'a [Multiaddr]> for ConnectTo<'a> {
+    fn from(value: &'a [Multiaddr]) -> Self {
+        Self::MultiaddrsRef(value)
+    }
+}
 
 impl From<PeerId> for ConnectTo<'static> {
     fn from(value: PeerId) -> Self {
@@ -234,6 +241,12 @@ impl From<PeerId> for ConnectTo<'static> {
 impl From<Multiaddr> for ConnectTo<'static> {
     fn from(value: Multiaddr) -> Self {
         Self::Multiaddr(value)
+    }
+}
+
+impl From<Vec<Multiaddr>> for ConnectTo<'static> {
+    fn from(value: Vec<Multiaddr>) -> Self {
+        Self::Multiaddrs(value)
     }
 }
 

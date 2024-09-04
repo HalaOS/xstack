@@ -10,7 +10,6 @@ version.workspace = true
 [dependencies]
 sha2 = { workspace = true }
 uint = { workspace = true }
-libp2p-identity = { workspace = true, features = ["peerid", "rand"] }
 generic-array = { workspace = true }
 xstack = { workspace = true }
 protobuf = { workspace = true }

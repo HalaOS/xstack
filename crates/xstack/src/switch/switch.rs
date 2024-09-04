@@ -251,30 +251,32 @@ impl Switch {
             .await?
             .ok_or(Error::RoutingPath(id.clone()))?;
 
+        self.transport_connect_raddrs(peer_info.addrs).await
+    }
+
+    async fn transport_connect_raddrs(&self, mut raddrs: Vec<Multiaddr>) -> Result<P2pConn> {
         let mut last_error = None;
 
-        let mut addrs = peer_info.addrs.clone();
+        raddrs.shuffle(&mut thread_rng());
 
-        addrs.shuffle(&mut thread_rng());
-
-        for raddr in addrs {
+        for raddr in raddrs {
             log::trace!("connect to {}", raddr);
 
             match self.transport_connect_prv(&raddr).await {
                 Ok(conn) => {
-                    log::trace!("{}, connect to {}, established", id, raddr);
+                    log::trace!("connect to {}, established", raddr);
                     return Ok(conn);
                 }
                 Err(err) => {
                     last_error = {
-                        log::trace!("{}, connect to {}, error: {}", id, raddr, err);
+                        log::trace!("connect to {}, error: {}", raddr, err);
                         Some(err)
                     }
                 }
             }
         }
 
-        Err(last_error.unwrap_or(Error::RoutingPath(id.to_owned())))
+        Err(last_error.unwrap_or(Error::ConnectAddresses))
     }
 
     /// Create a new transport layer socket that accepts peer's inbound connections.
@@ -374,6 +376,10 @@ impl Switch {
             ConnectTo::MultiaddrRef(raddr) => self.transport_connect(raddr).await?,
             ConnectTo::PeerId(peer_id) => self.transport_connect_to(&peer_id).await?,
             ConnectTo::Multiaddr(raddr) => self.transport_connect(&raddr).await?,
+            ConnectTo::MultiaddrsRef(raddrs) => {
+                self.transport_connect_raddrs(raddrs.to_vec()).await?
+            }
+            ConnectTo::Multiaddrs(raddrs) => self.transport_connect_raddrs(raddrs).await?,
         };
 
         log::trace!("open stream, conn_id={}", conn.id());

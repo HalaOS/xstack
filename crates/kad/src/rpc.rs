@@ -1,9 +1,8 @@
 use std::future::Future;
 
 use futures::{AsyncRead, AsyncWrite};
-use libp2p_identity::PeerId;
 use protobuf::MessageField;
-use xstack::{multiaddr::Multiaddr, PeerInfo, XStackRpc};
+use xstack::{identity::PeerId, multiaddr::Multiaddr, PeerInfo, XStackRpc};
 
 use crate::{
     proto::{

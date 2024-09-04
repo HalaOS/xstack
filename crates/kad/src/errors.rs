@@ -1,4 +1,3 @@
-use libp2p_identity::ParseError;
 use xstack::multiaddr::{self, Multiaddr};
 
 /// The error type of this crate.
@@ -11,7 +10,7 @@ pub enum Error {
     Closest,
 
     #[error(transparent)]
-    PeerIdParseError(#[from] ParseError),
+    PeerIdParseError(#[from] xstack::identity::ParseError),
 
     #[error(transparent)]
     MultiaddrError(#[from] multiaddr::Error),

@@ -59,6 +59,9 @@ pub enum Error {
     #[error("Can't find peer in the book.")]
     PeerNotFound,
 
+    #[error("Connect peer address list is empty.")]
+    ConnectAddresses,
+
     #[error("Received mismatched ping response")]
     Ping,
 

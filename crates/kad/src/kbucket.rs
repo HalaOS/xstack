@@ -10,10 +10,9 @@ use std::{
 
 use futures::{lock::Mutex, StreamExt};
 use generic_array::GenericArray;
-use libp2p_identity::PeerId;
 
 use rasi::task::spawn_ok;
-use xstack::{events, EventSource, ProtocolStream, Switch};
+use xstack::{events, identity::PeerId, EventSource, ProtocolStream, Switch};
 
 use crate::{Error, Result};
 
@@ -341,7 +340,6 @@ mod tests {
 
     use super::{uint::U256, *};
 
-    use libp2p_identity::PeerId;
     use quickcheck::*;
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
     use xstack::global_switch;
