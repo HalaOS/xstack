@@ -3,7 +3,6 @@
 use std::{io::Result, pin::Pin};
 
 use futures::{stream::unfold, AsyncRead, AsyncWrite};
-use libp2p_identity::PeerId;
 use multistream_select::{dialer_select_proto, Version};
 
 use crate::{driver_wrapper, switch::Switch, XStackRpc, PROTOCOL_IPFS_PING};
@@ -252,18 +251,6 @@ impl P2pConn {
 
         Ok(stream.xstack_ping().await?)
     }
-}
-
-/// The state of transport connection.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum P2pConnState {
-    Connected { id: String, peer_id: PeerId },
-
-    HandshakeSuccess { id: String, peer_id: PeerId },
-
-    HandshakeFailed { id: String, peer_id: PeerId },
-
-    Disconnected { id: String, peer_id: PeerId },
 }
 
 driver_wrapper!(

@@ -10,14 +10,13 @@ use multistream_select::listener_select_proto;
 use rand::{seq::SliceRandom, thread_rng};
 use rasi::{task::spawn_ok, timer::TimeoutExt};
 
-use crate::StreamDispatcher;
 use crate::{
     book::PeerInfo,
-    event::{Event, EventSource},
     keystore::KeyStore,
     transport::{P2pConn, ProtocolStream, TransportListener},
-    Error, ProtocolListener, ProtocolListenerId, Result,
+    Error, ProtocolListener, Result, XStackId,
 };
+use crate::{EventMediator, StreamDispatcher};
 
 pub use super::immutable::SwitchBuilder;
 
@@ -250,16 +249,41 @@ impl Switch {
 
         log::trace!("{}, call transport driver", raddr);
 
-        let mut conn = transport.connect(self, raddr).await?;
+        let connected = self
+            .immutable
+            .connector
+            .connect(self, transport, raddr)
+            .await?;
 
-        log::trace!("{}, transport connection established", raddr);
+        let conn = match connected {
+            crate::Connected::New(mut conn) => {
+                log::trace!("{}, transport connection established.", raddr);
 
-        if let Err(err) = self.handshake(&mut conn).await {
-            log::error!("{}, setup error: {}", raddr, err);
-            _ = conn.close().await;
-        } else {
-            log::trace!("{}, setup success", raddr);
-        }
+                // notify event.
+                self.immutable
+                    .event_mediator
+                    .raise(crate::Event::Connected {
+                        conn_id: conn.id().to_owned(),
+                        peer_id: conn.public_key().to_peer_id(),
+                    })
+                    .await;
+
+                log::trace!("conn {}, connected event notified.", conn.id());
+
+                if let Err(err) = self.handshake(&mut conn).await {
+                    log::error!("{}, setup error: {}", raddr, err);
+                    _ = conn.close().await;
+                    return Err(err);
+                } else {
+                    log::trace!("{}, setup success", raddr);
+                    conn
+                }
+            }
+            crate::Connected::Authenticated(conn) => {
+                log::trace!("{}, transport connection reused.", raddr);
+                conn
+            }
+        };
 
         Ok(conn)
     }
@@ -367,7 +391,7 @@ impl Switch {
         I: IntoIterator,
         I::Item: AsRef<str>,
     {
-        let id = ProtocolListenerId::default();
+        let id = XStackId::default();
 
         let protos = protos
             .into_iter()
@@ -408,14 +432,6 @@ impl Switch {
 }
 
 impl Switch {
-    /// Create a new [`Event`] listener.
-    pub async fn on<E>(&self, buffer: usize) -> EventSource<E>
-    where
-        E: Event,
-    {
-        self.mutable.lock().await.new_listener(buffer)
-    }
-
     /// Remove [`PeerInfo`] from the [`PeerBook`](crate::book::PeerBook) of this switch.
     pub async fn remove_peer_info(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
         Ok(self.immutable.peer_book.remove(peer_id).await?)
@@ -444,6 +460,11 @@ impl Switch {
     /// Get associated stream dispatcher instance.
     pub fn stream_dispatcher(&self) -> &StreamDispatcher {
         &self.immutable.stream_dispatcher
+    }
+
+    /// Get the [`EventMediator`] of this switch.
+    pub fn event_mediator(&self) -> &EventMediator {
+        &self.immutable.event_mediator
     }
 
     /// Get this switch's public key.

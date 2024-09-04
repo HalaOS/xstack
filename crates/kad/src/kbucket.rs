@@ -1,6 +1,7 @@
 use std::{
     collections::VecDeque,
     fmt::Display,
+    num::NonZeroUsize,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -264,8 +265,11 @@ impl<const K: usize> KBucketTable<K> {
     pub async fn bind(switch: &Switch) -> Self {
         assert!(K > 0, "the k must greater than zero");
 
-        // create a event source of '/xstack/event/connected'
-        let mut event_connected = EventSource::<events::Connected>::bind_with(&switch, 100).await;
+        let mut event_connected = EventSource::<events::HandshakeSuccess>::bind_with(
+            &switch,
+            NonZeroUsize::new(100).unwrap(),
+        )
+        .await;
 
         let table = Self {
             len: Default::default(),
@@ -281,7 +285,7 @@ impl<const K: usize> KBucketTable<K> {
 
         // create background update task.
         spawn_ok(async move {
-            while let Some(peer_id) = event_connected.next().await {
+            while let Some((_, peer_id)) = event_connected.next().await {
                 table_cloned.insert(peer_id).await;
             }
         });

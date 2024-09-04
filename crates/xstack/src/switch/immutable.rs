@@ -5,10 +5,12 @@ use multiaddr::Multiaddr;
 use crate::{
     book::{peerbook_syscall::DriverPeerBook, MemoryPeerBook, PeerBook},
     connector_syscall::DriverConnector,
+    event_syscall::DriverEventMediator,
     keystore::{keystore_syscall::DriverKeyStore, KeyStore, MemoryKeyStore},
     stream_syscall::DriverStreamDispatcher,
     transport::{transport_syscall::DriverTransport, Transport},
-    ConnPool, Connector, Error, MutexStreamDispatcher, Result, StreamDispatcher,
+    ConnPool, Connector, Error, EventMediator, MutexStreamDispatcher, Result, StreamDispatcher,
+    SyncEventMediator,
 };
 
 use super::Switch;
@@ -32,19 +34,22 @@ pub(super) struct ImmutableSwitch {
     pub(super) connector: Connector,
     /// StreamDispatcher for this switch.
     pub(super) stream_dispatcher: StreamDispatcher,
+    /// EventMediator for this switch,
+    pub(super) event_mediator: EventMediator,
 }
 
 impl ImmutableSwitch {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
             agent_version,
-            timeout: Duration::from_secs(10),
+            timeout: Duration::from_secs(5),
             max_packet_size: 1024 * 1024 * 4,
             transports: vec![],
             keystore: MemoryKeyStore::random().into(),
             peer_book: MemoryPeerBook::default().into(),
             connector: ConnPool::default().into(),
             stream_dispatcher: MutexStreamDispatcher::default().into(),
+            event_mediator: SyncEventMediator::default().into(),
         }
     }
 
@@ -94,6 +99,18 @@ impl SwitchBuilder {
     pub fn early_inbound_stream_cached_size(self, value: usize) -> Self {
         self.and_then(|mut cfg| {
             cfg.early_inbound_stream_cached_size = value;
+
+            Ok(cfg)
+        })
+    }
+
+    /// Replace default [`SyncEventMediator`].
+    pub fn event_mediator<K>(self, value: K) -> Self
+    where
+        K: DriverEventMediator + 'static,
+    {
+        self.and_then(|mut cfg| {
+            cfg.immutable.event_mediator = value.into();
 
             Ok(cfg)
         })

@@ -7,8 +7,7 @@ use multiaddr::Multiaddr;
 use protobuf::Message;
 
 use crate::{
-    proto::identity::Identity, Error, EventArgument, P2pConn, PeerInfo, ProtocolStream, Result,
-    XStackRpc,
+    proto::identity::Identity, Error, Event, P2pConn, PeerInfo, ProtocolStream, Result, XStackRpc,
 };
 
 use super::Switch;
@@ -100,11 +99,6 @@ impl Switch {
 
         self.insert_peer_info(peer_info).await?;
 
-        // notify event '/xstack/event/connected'
-        let mut mutable = self.mutable.lock().await;
-
-        mutable.notify(EventArgument::Connected(peer_id));
-
         Ok(())
     }
 
@@ -120,12 +114,28 @@ impl Switch {
                     .stream_dispatcher
                     .handshake_success(conn.id())
                     .await;
+
+                self.immutable
+                    .event_mediator
+                    .raise(Event::HandshakeSuccess {
+                        conn_id: conn.id().to_owned(),
+                        peer_id: conn_peer_id.to_owned(),
+                    })
+                    .await;
                 return Ok(());
             }
             Err(err) => {
                 self.immutable
                     .stream_dispatcher
                     .handshake_failed(conn.id())
+                    .await;
+
+                self.immutable
+                    .event_mediator
+                    .raise(Event::HandshakeFailed {
+                        conn_id: conn.id().to_owned(),
+                        peer_id: conn_peer_id.to_owned(),
+                    })
                     .await;
                 return Err(err);
             }

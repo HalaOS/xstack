@@ -1,10 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     io::Result,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -12,7 +9,7 @@ use futures::{lock::Mutex, stream::unfold, Stream};
 use futures_map::KeyWaitMap;
 use rasi::task::spawn_ok;
 
-use crate::{driver_wrapper, global_switch, Error, ProtocolStream, Switch};
+use crate::{driver_wrapper, global_switch, Error, ProtocolStream, Switch, XStackId};
 
 /// A libp2p protocol dispather driver must implement the `Driver-*` traits in this module.
 pub mod stream_syscall {
@@ -22,15 +19,15 @@ pub mod stream_syscall {
 
     use crate::ProtocolStream;
 
-    use super::ProtocolListenerId;
+    use super::XStackId;
 
     #[async_trait]
     pub trait DriverStreamDispatcher: Sync + Send {
-        async fn bind(&self, id: ProtocolListenerId, protocols: &[String]) -> Result<()>;
+        async fn bind(&self, id: XStackId, protocols: &[String]) -> Result<()>;
 
-        async fn close(&self, id: ProtocolListenerId);
+        async fn close(&self, id: XStackId);
 
-        async fn accept(&self, id: ProtocolListenerId) -> Result<(ProtocolStream, String)>;
+        async fn accept(&self, id: XStackId) -> Result<(ProtocolStream, String)>;
 
         async fn handshake(&self, conn_id: &str);
 
@@ -43,30 +40,6 @@ pub mod stream_syscall {
     }
 }
 
-/// The listener id for protocol stream.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProtocolListenerId(usize);
-
-impl From<ProtocolListenerId> for usize {
-    fn from(value: ProtocolListenerId) -> Self {
-        value.0
-    }
-}
-
-impl From<&ProtocolListenerId> for usize {
-    fn from(value: &ProtocolListenerId) -> Self {
-        value.0
-    }
-}
-
-impl Default for ProtocolListenerId {
-    fn default() -> Self {
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-
-        Self(NEXT.fetch_add(1, Ordering::SeqCst))
-    }
-}
-
 driver_wrapper!(
     ["A type wrapper of [`DriverStreamDispatcher`](stream_syscall::DriverStreamDispatcher)"]
     StreamDispatcher[stream_syscall::DriverStreamDispatcher]
@@ -75,11 +48,11 @@ driver_wrapper!(
 /// A listener of protocol streams.
 pub struct ProtocolListener {
     switch: Switch,
-    id: ProtocolListenerId,
+    id: XStackId,
 }
 
 impl ProtocolListener {
-    pub fn new(switch: Switch, id: ProtocolListenerId) -> Self {
+    pub fn new(switch: Switch, id: XStackId) -> Self {
         Self { switch, id }
     }
 
@@ -132,7 +105,7 @@ impl Drop for ProtocolListener {
 
 pub struct ProtocolListenerCloser {
     switch: Switch,
-    id: ProtocolListenerId,
+    id: XStackId,
 }
 
 impl ProtocolListenerCloser {
@@ -144,8 +117,8 @@ impl ProtocolListenerCloser {
 #[derive(Default)]
 struct RawMutexStreamDispatcher {
     is_closed: bool,
-    inbound_streams: HashMap<ProtocolListenerId, VecDeque<(ProtocolStream, String)>>,
-    protos: HashMap<String, ProtocolListenerId>,
+    inbound_streams: HashMap<XStackId, VecDeque<(ProtocolStream, String)>>,
+    protos: HashMap<String, XStackId>,
     unauth_streams: HashMap<String, Vec<(ProtocolStream, String)>>,
 }
 
@@ -153,7 +126,7 @@ struct RawMutexStreamDispatcher {
 #[derive(Default)]
 pub struct MutexStreamDispatcher {
     raw: Arc<Mutex<RawMutexStreamDispatcher>>,
-    event_map: Arc<KeyWaitMap<ProtocolListenerId, ()>>,
+    event_map: Arc<KeyWaitMap<XStackId, ()>>,
 }
 
 impl Drop for MutexStreamDispatcher {
@@ -199,7 +172,7 @@ impl stream_syscall::DriverStreamDispatcher for MutexStreamDispatcher {
             }
         }
     }
-    async fn bind(&self, id: ProtocolListenerId, protocols: &[String]) -> Result<()> {
+    async fn bind(&self, id: XStackId, protocols: &[String]) -> Result<()> {
         let mut raw = self.raw.lock().await;
 
         if raw.is_closed {
@@ -224,7 +197,7 @@ impl stream_syscall::DriverStreamDispatcher for MutexStreamDispatcher {
         Ok(())
     }
 
-    async fn close(&self, id: ProtocolListenerId) {
+    async fn close(&self, id: XStackId) {
         let mut raw = self.raw.lock().await;
 
         let keys = raw
@@ -250,7 +223,7 @@ impl stream_syscall::DriverStreamDispatcher for MutexStreamDispatcher {
         self.event_map.insert(id, ());
     }
 
-    async fn accept(&self, id: ProtocolListenerId) -> Result<(ProtocolStream, String)> {
+    async fn accept(&self, id: XStackId) -> Result<(ProtocolStream, String)> {
         loop {
             let mut raw = self.raw.lock().await;
 

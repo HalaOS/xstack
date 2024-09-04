@@ -148,6 +148,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod book;
+use std::{
+    fmt::Display,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
 pub use book::*;
 
 mod keystore;
@@ -191,3 +196,33 @@ pub use connector::*;
 
 mod stream;
 pub use stream::*;
+
+/// Monotonically increasing id
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct XStackId(usize);
+
+impl Display for XStackId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "XStackId({})", self.0)
+    }
+}
+
+impl From<XStackId> for usize {
+    fn from(value: XStackId) -> Self {
+        value.0
+    }
+}
+
+impl From<&XStackId> for usize {
+    fn from(value: &XStackId) -> Self {
+        value.0
+    }
+}
+
+impl Default for XStackId {
+    fn default() -> Self {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+        Self(NEXT.fetch_add(1, Ordering::SeqCst))
+    }
+}

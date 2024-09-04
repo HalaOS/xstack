@@ -1,5 +1,6 @@
 use std::{
     collections::VecDeque,
+    num::NonZeroUsize,
     ops::Deref,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -12,7 +13,7 @@ use futures::{lock::Mutex, StreamExt, TryStreamExt};
 use futures_map::KeyWaitMap;
 use rasi::task::spawn_ok;
 use xstack::{
-    events::Connected,
+    events,
     multiaddr::{Multiaddr, Protocol},
     transport_syscall::{DriverListener, DriverTransport},
     AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolListenerCloser, ProtocolStream,
@@ -215,13 +216,13 @@ impl CircuitTransportState {
 
 #[allow(unused)]
 struct CircuitHopClient {
-    event_source: EventSource<Connected>,
+    event_source: EventSource<events::HandshakeSuccess>,
     state: CircuitTransportState,
 }
 
 impl CircuitHopClient {
     async fn bind(switch: &Switch, state: &CircuitTransportState) {
-        let event_source = EventSource::bind_with(switch, 100).await;
+        let event_source = EventSource::bind_with(switch, NonZeroUsize::new(100).unwrap()).await;
 
         spawn_ok(
             Self {
@@ -243,7 +244,7 @@ impl CircuitHopClient {
     }
 
     async fn run_loop_prv(&mut self) -> Result<()> {
-        while let Some(peer_id) = self.event_source.next().await {
+        while let Some((_, peer_id)) = self.event_source.next().await {
             if let Some(peer_info) = self.state.lookup_peer_info(&peer_id).await? {
                 if peer_info
                     .protos

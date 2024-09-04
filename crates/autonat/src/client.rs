@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, num::NonZeroUsize, sync::Arc};
 
 use futures::{lock::Mutex, AsyncReadExt, AsyncWriteExt, StreamExt};
 use protobuf::{Message, MessageField};
@@ -98,10 +98,10 @@ impl AutoNatClient {
     }
 
     async fn auto_nat_client(self) {
-        let mut event_source: EventSource<events::Connected> =
-            EventSource::bind_with(&self.switch, 100).await;
+        let mut event_source: EventSource<events::HandshakeSuccess> =
+            EventSource::bind_with(&self.switch, NonZeroUsize::new(100).unwrap()).await;
 
-        while let Some(peer_id) = event_source.next().await {
+        while let Some((_, peer_id)) = event_source.next().await {
             if AutoNAT::Unknown == self.switch.nat().await {
                 if let Ok(Some(peer_info)) = self.switch.lookup_peer_info(&peer_id).await {
                     if peer_info
