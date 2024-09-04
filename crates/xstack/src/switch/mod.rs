@@ -1,9 +1,8 @@
-mod immutable;
+mod builder;
 mod mutable;
 mod protocols;
 mod switch;
-mod types;
-pub use types::*;
 
+pub use builder::*;
 pub use protocols::*;
 pub use switch::*;

@@ -196,7 +196,7 @@ pub struct EventSourceCloser {
 
 impl EventSourceCloser {
     pub async fn close(&self) {
-        self.switch.event_mediator().close(&self.id).await
+        self.switch.event_mediator.close(&self.id).await
     }
 }
 
@@ -251,7 +251,7 @@ where
     pub async fn bind_with(switch: &Switch, buffer: NonZeroUsize) -> Self {
         let id = XStackId::default();
 
-        let stream = switch.event_mediator().bind(id, E::name(), buffer).await;
+        let stream = switch.event_mediator.bind(id, E::name(), buffer).await;
 
         Self {
             id,

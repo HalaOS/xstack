@@ -1,6 +1,6 @@
 use multiaddr::Multiaddr;
 
-use super::AutoNAT;
+use crate::AutoNAT;
 
 #[derive(Default)]
 pub(super) struct MutableSwitch {

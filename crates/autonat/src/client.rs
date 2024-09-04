@@ -165,7 +165,7 @@ impl AutoNatClient {
 
         let body_len = unsigned_varint::aio::read_usize(&mut stream).await?;
 
-        if self.switch.max_packet_size() < body_len {
+        if self.switch.max_packet_size < body_len {
             return Err(Error::Overflow(body_len));
         }
 

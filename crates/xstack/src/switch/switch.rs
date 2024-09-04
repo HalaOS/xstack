@@ -1,6 +1,8 @@
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::ops::Deref;
+use std::{fmt::Debug, sync::Arc};
 
-use super::{immutable::ImmutableSwitch, AutoNAT, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
+use super::SwitchBuilder;
+use super::{builder::SwitchOptions, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
 use futures::{lock::Mutex, TryStreamExt};
 use libp2p_identity::{PeerId, PublicKey};
@@ -12,57 +14,10 @@ use rasi::{task::spawn_ok, timer::TimeoutExt};
 
 use crate::{
     book::PeerInfo,
-    keystore::KeyStore,
     transport::{P2pConn, ProtocolStream, TransportListener},
     Error, ProtocolListener, Result, XStackId,
 };
-use crate::{EventMediator, StreamDispatcher};
-
-pub use super::immutable::SwitchBuilder;
-
-/// Variant type used by [`connect`](Switch::connect) function.
-pub enum ConnectTo<'a> {
-    PeerIdRef(&'a PeerId),
-    MultiaddrRef(&'a Multiaddr),
-    PeerId(PeerId),
-    Multiaddr(Multiaddr),
-}
-
-impl<'a> From<&'a PeerId> for ConnectTo<'a> {
-    fn from(value: &'a PeerId) -> Self {
-        Self::PeerIdRef(value)
-    }
-}
-
-impl<'a> From<&'a Multiaddr> for ConnectTo<'a> {
-    fn from(value: &'a Multiaddr) -> Self {
-        Self::MultiaddrRef(value)
-    }
-}
-
-impl From<PeerId> for ConnectTo<'static> {
-    fn from(value: PeerId) -> Self {
-        Self::PeerId(value)
-    }
-}
-
-impl From<Multiaddr> for ConnectTo<'static> {
-    fn from(value: Multiaddr) -> Self {
-        Self::Multiaddr(value)
-    }
-}
-
-impl TryFrom<&str> for ConnectTo<'static> {
-    type Error = Error;
-
-    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
-        if let Ok(peer_id) = value.parse::<PeerId>() {
-            return Ok(Self::PeerId(peer_id));
-        }
-
-        return Ok(Self::Multiaddr(value.parse::<Multiaddr>()?));
-    }
-}
+use crate::{AutoNAT, ConnectTo};
 
 /// `Switch` is the entry point of the libp2p network.
 ///
@@ -76,17 +31,17 @@ pub struct Switch {
     // pub(super) inner: Arc<InnerSwitch>,
     pub(super) public_key: Arc<PublicKey>,
     pub(super) local_peer_id: Arc<PeerId>,
-    pub(super) immutable: Arc<ImmutableSwitch>,
+    pub(super) ops: Arc<SwitchOptions>,
     pub(super) mutable: Arc<Mutex<MutableSwitch>>,
 }
 
-// impl Deref for Switch {
-//     type Target = InnerSwitch;
+impl Deref for Switch {
+    type Target = SwitchOptions;
 
-//     fn deref(&self) -> &Self::Target {
-//         &self.inner
-//     }
-// }
+    fn deref(&self) -> &Self::Target {
+        &self.ops
+    }
+}
 
 impl Switch {
     async fn handle_incoming(&self, listener: TransportListener) -> Result<()> {
@@ -125,7 +80,7 @@ impl Switch {
 
     /// Start a background task to accept inbound stream, and make a identity request to authenticate peer.
     async fn handshake(&self, conn: &mut P2pConn) -> Result<()> {
-        self.immutable.stream_dispatcher.handshake(conn.id()).await;
+        self.ops.stream_dispatcher.handshake(conn.id()).await;
 
         let this = self.clone();
 
@@ -151,7 +106,7 @@ impl Switch {
 
         // start "/ipfs/id/1.0.0" handshake.
         self.identity_request(conn)
-            .timeout(self.immutable.timeout)
+            .timeout(self.ops.timeout)
             .await
             .ok_or(Error::Timeout)??;
 
@@ -178,10 +133,10 @@ impl Switch {
             stream.id()
         );
 
-        let protos = self.immutable.stream_dispatcher.protos().await;
+        let protos = self.ops.stream_dispatcher.protos().await;
 
         let (protoco_id, _) = listener_select_proto(&mut stream, &protos)
-            .timeout(self.immutable.timeout)
+            .timeout(self.ops.timeout)
             .await
             .ok_or(Error::Timeout)??;
 
@@ -231,7 +186,7 @@ impl Switch {
             }
             PROTOCOL_IPFS_PING => self.ping_echo(stream).await?,
             _ => {
-                self.immutable
+                self.ops
                     .stream_dispatcher
                     .dispatch(stream, protocol_id)
                     .await;
@@ -243,24 +198,20 @@ impl Switch {
 
     async fn transport_connect_prv(&self, raddr: &Multiaddr) -> Result<P2pConn> {
         let transport = self
-            .immutable
+            .ops
             .get_transport_by_address(raddr)
             .ok_or(Error::UnspportMultiAddr(raddr.to_owned()))?;
 
         log::trace!("{}, call transport driver", raddr);
 
-        let connected = self
-            .immutable
-            .connector
-            .connect(self, transport, raddr)
-            .await?;
+        let connected = self.ops.connector.connect(self, transport, raddr).await?;
 
         let conn = match connected {
             crate::Connected::New(mut conn) => {
                 log::trace!("{}, transport connection established.", raddr);
 
                 // notify event.
-                self.immutable
+                self.ops
                     .event_mediator
                     .raise(crate::Event::Connected {
                         conn_id: conn.id().to_owned(),
@@ -294,7 +245,7 @@ impl Switch {
     /// and if there is one, it will directly return the cached connection
     async fn transport_connect_to(&self, id: &PeerId) -> Result<P2pConn> {
         let peer_info = self
-            .immutable
+            .ops
             .peer_book
             .get(id)
             .await?
@@ -330,7 +281,7 @@ impl Switch {
     ///
     pub(crate) async fn transport_bind(&self, laddr: &Multiaddr) -> Result<()> {
         let transport = self
-            .immutable
+            .ops
             .get_transport_by_address(laddr)
             .ok_or(Error::UnspportMultiAddr(laddr.to_owned()))?;
 
@@ -398,7 +349,7 @@ impl Switch {
             .map(|item| item.as_ref().to_owned())
             .collect::<Vec<_>>();
 
-        self.immutable.stream_dispatcher.bind(id, &protos).await?;
+        self.ops.stream_dispatcher.bind(id, &protos).await?;
 
         Ok(ProtocolListener::new(self.clone(), id))
     }
@@ -434,37 +385,22 @@ impl Switch {
 impl Switch {
     /// Remove [`PeerInfo`] from the [`PeerBook`](crate::book::PeerBook) of this switch.
     pub async fn remove_peer_info(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
-        Ok(self.immutable.peer_book.remove(peer_id).await?)
+        Ok(self.ops.peer_book.remove(peer_id).await?)
     }
 
     /// insert new [`PeerInfo`] into the [`PeerBook`](crate::PeerBook) of this `Switch`
     pub async fn insert_peer_info(&self, peer_info: PeerInfo) -> Result<Option<PeerInfo>> {
-        Ok(self.immutable.peer_book.insert(peer_info).await?)
+        Ok(self.ops.peer_book.insert(peer_info).await?)
     }
 
     /// Returns the [`PeerInfo`] of the [`peer_id`](PeerId).
     pub async fn lookup_peer_info(&self, peer_id: &PeerId) -> Result<Option<PeerInfo>> {
-        Ok(self.immutable.peer_book.get(peer_id).await?)
+        Ok(self.ops.peer_book.get(peer_id).await?)
     }
 
     /// Reverse lookup [`PeerId`] for the peer indicated by the listening address.
     pub async fn lookup_peer_id(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
-        Ok(self.immutable.peer_book.listen_on(raddr).await?)
-    }
-
-    /// Get associated keystore instance.
-    pub fn keystore(&self) -> &KeyStore {
-        &self.immutable.keystore
-    }
-
-    /// Get associated stream dispatcher instance.
-    pub fn stream_dispatcher(&self) -> &StreamDispatcher {
-        &self.immutable.stream_dispatcher
-    }
-
-    /// Get the [`EventMediator`] of this switch.
-    pub fn event_mediator(&self) -> &EventMediator {
-        &self.immutable.event_mediator
+        Ok(self.ops.peer_book.listen_on(raddr).await?)
     }
 
     /// Get this switch's public key.
@@ -505,16 +441,6 @@ impl Switch {
     /// Set the the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
     pub async fn set_nat(&self, state: AutoNAT) {
         self.mutable.lock().await.set_nat(state)
-    }
-
-    /// Returns the `max_packet_size` configuration value.
-    pub fn max_packet_size(&self) -> usize {
-        self.immutable.max_packet_size
-    }
-
-    /// Returns the protocol `timeout` configuration value.
-    pub fn timeout(&self) -> Duration {
-        self.immutable.timeout
     }
 
     /// Register self into global context.

@@ -26,12 +26,12 @@ use xstack::{
     identity::PublicKey,
     multiaddr::{Multiaddr, ToSockAddr},
     transport_syscall::{DriverConnection, DriverListener, DriverStream},
-    ProtocolStream, Switch, P2pConn,
+    P2pConn, ProtocolStream, Switch,
 };
 
 pub use futures_boring::ssl::SslAcceptor;
 pub async fn create_ssl_acceptor(switch: &Switch) -> Result<SslAcceptor> {
-    let (cert, pk) = xstack_x509::generate(switch.keystore()).await?;
+    let (cert, pk) = xstack_x509::generate(&switch.keystore).await?;
 
     let cert = X509::from_der(&cert)?;
 
@@ -145,7 +145,7 @@ impl TlsConn {
     where
         S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
     {
-        let (cert, pk) = xstack_x509::generate(switch.keystore()).await?;
+        let (cert, pk) = xstack_x509::generate(&switch.keystore).await?;
 
         let cert = X509::from_der(&cert)?;
 

@@ -197,6 +197,9 @@ pub use connector::*;
 mod stream;
 pub use stream::*;
 
+mod nat;
+pub use nat::*;
+
 /// Monotonically increasing id
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct XStackId(usize);

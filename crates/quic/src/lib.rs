@@ -28,7 +28,7 @@ use xstack::{
     identity::PublicKey,
     multiaddr::{Multiaddr, Protocol, ToSockAddr},
     transport_syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport},
-    KeyStore, ProtocolStream, Switch, P2pConn, TransportListener,
+    KeyStore, P2pConn, ProtocolStream, Switch, TransportListener,
 };
 
 async fn create_quic_config(host_key: &KeyStore, timeout: Duration) -> io::Result<Config> {
@@ -104,7 +104,7 @@ impl Default for QuicTransport {
 #[async_trait]
 impl DriverTransport for QuicTransport {
     async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
-        let quic_config = create_quic_config(switch.keystore(), self.0).await?;
+        let quic_config = create_quic_config(&switch.keystore, self.0).await?;
 
         let laddrs = laddr.to_sockaddr()?;
 
@@ -117,7 +117,7 @@ impl DriverTransport for QuicTransport {
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
     async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn> {
-        let mut quic_config = create_quic_config(switch.keystore(), self.0).await?;
+        let mut quic_config = create_quic_config(&switch.keystore, self.0).await?;
 
         let raddr = raddr.to_sockaddr()?;
 

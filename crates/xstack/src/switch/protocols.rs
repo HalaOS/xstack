@@ -56,7 +56,7 @@ impl Switch {
         conn_peer_id: &PeerId,
         mut stream: ProtocolStream,
     ) -> Result<()> {
-        let identity = XStackRpc::xstack_recv_identity(&mut stream, self.max_packet_size()).await?;
+        let identity = XStackRpc::xstack_recv_identity(&mut stream, self.max_packet_size).await?;
 
         let pubkey = PublicKey::try_decode_protobuf(identity.publicKey())?;
 
@@ -110,12 +110,12 @@ impl Switch {
 
         match self.identity_push(&conn_peer_id, stream).await {
             Ok(_) => {
-                self.immutable
+                self.ops
                     .stream_dispatcher
                     .handshake_success(conn.id())
                     .await;
 
-                self.immutable
+                self.ops
                     .event_mediator
                     .raise(Event::HandshakeSuccess {
                         conn_id: conn.id().to_owned(),
@@ -125,12 +125,9 @@ impl Switch {
                 return Ok(());
             }
             Err(err) => {
-                self.immutable
-                    .stream_dispatcher
-                    .handshake_failed(conn.id())
-                    .await;
+                self.ops.stream_dispatcher.handshake_failed(conn.id()).await;
 
-                self.immutable
+                self.ops
                     .event_mediator
                     .raise(Event::HandshakeFailed {
                         conn_id: conn.id().to_owned(),
@@ -153,7 +150,7 @@ impl Switch {
 
         identity.set_publicKey(self.local_public_key().encode_protobuf());
 
-        identity.set_agentVersion(self.immutable.agent_version.to_owned());
+        identity.set_agentVersion(self.ops.agent_version.to_owned());
 
         identity.listenAddrs = self
             .listen_addrs()
@@ -162,7 +159,7 @@ impl Switch {
             .map(|addr| addr.to_vec())
             .collect::<Vec<_>>();
 
-        identity.protocols = self.immutable.stream_dispatcher.protos().await;
+        identity.protocols = self.ops.stream_dispatcher.protos().await;
 
         let buf = identity.write_to_bytes()?;
 

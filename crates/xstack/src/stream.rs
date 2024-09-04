@@ -82,7 +82,7 @@ impl ProtocolListener {
     }
 
     pub async fn accept(&self) -> Result<(ProtocolStream, String)> {
-        self.switch.stream_dispatcher().accept(self.id).await
+        self.switch.stream_dispatcher.accept(self.id).await
     }
 
     pub fn into_incoming(self) -> impl Stream<Item = Result<(ProtocolStream, String)>> + Unpin {
@@ -110,7 +110,7 @@ pub struct ProtocolListenerCloser {
 
 impl ProtocolListenerCloser {
     pub async fn close(&self) {
-        self.switch.stream_dispatcher().close(self.id).await;
+        self.switch.stream_dispatcher.close(self.id).await;
     }
 }
 

@@ -3,6 +3,8 @@
 use std::{io::Result, pin::Pin};
 
 use futures::{stream::unfold, AsyncRead, AsyncWrite};
+use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
 use multistream_select::{dialer_select_proto, Version};
 
 use crate::{driver_wrapper, switch::Switch, XStackRpc, PROTOCOL_IPFS_PING};
@@ -203,6 +205,50 @@ pub mod transport_syscall {
     }
 }
 
+/// Variant type used by [`connect`](Switch::connect) function.
+pub enum ConnectTo<'a> {
+    PeerIdRef(&'a PeerId),
+    MultiaddrRef(&'a Multiaddr),
+    PeerId(PeerId),
+    Multiaddr(Multiaddr),
+}
+
+impl<'a> From<&'a PeerId> for ConnectTo<'a> {
+    fn from(value: &'a PeerId) -> Self {
+        Self::PeerIdRef(value)
+    }
+}
+
+impl<'a> From<&'a Multiaddr> for ConnectTo<'a> {
+    fn from(value: &'a Multiaddr) -> Self {
+        Self::MultiaddrRef(value)
+    }
+}
+
+impl From<PeerId> for ConnectTo<'static> {
+    fn from(value: PeerId) -> Self {
+        Self::PeerId(value)
+    }
+}
+
+impl From<Multiaddr> for ConnectTo<'static> {
+    fn from(value: Multiaddr) -> Self {
+        Self::Multiaddr(value)
+    }
+}
+
+impl TryFrom<&str> for ConnectTo<'static> {
+    type Error = crate::Error;
+
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
+        if let Ok(peer_id) = value.parse::<PeerId>() {
+            return Ok(Self::PeerId(peer_id));
+        }
+
+        return Ok(Self::Multiaddr(value.parse::<Multiaddr>()?));
+    }
+}
+
 driver_wrapper!(
     ["A type wrapper of [`DriverTransport`](transport_syscall::DriverTransport)"]
     Transport[transport_syscall::DriverTransport]
@@ -267,7 +313,7 @@ impl ProtocolStream {
         protos: I,
     ) -> crate::Result<(ProtocolStream, I::Item)>
     where
-        C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
+        C: TryInto<ConnectTo<'a>, Error = E>,
         I: IntoIterator,
         I::Item: AsRef<str>,
         E: std::fmt::Debug,
@@ -278,7 +324,7 @@ impl ProtocolStream {
     /// Send a ping request to target and check the response.
     pub async fn ping<'a, C, E>(target: C) -> crate::Result<()>
     where
-        C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
+        C: TryInto<ConnectTo<'a>, Error = E>,
         E: std::fmt::Debug,
     {
         Self::ping_with(crate::global_switch(), target).await
@@ -293,7 +339,7 @@ impl ProtocolStream {
         protos: I,
     ) -> crate::Result<(ProtocolStream, I::Item)>
     where
-        C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
+        C: TryInto<ConnectTo<'a>, Error = E>,
         I: IntoIterator,
         I::Item: AsRef<str>,
         E: std::fmt::Debug,
@@ -304,7 +350,7 @@ impl ProtocolStream {
     /// Send a ping request to target and check the response.
     pub async fn ping_with<'a, C, E>(switch: &Switch, target: C) -> crate::Result<()>
     where
-        C: TryInto<crate::switch::ConnectTo<'a>, Error = E>,
+        C: TryInto<ConnectTo<'a>, Error = E>,
         E: std::fmt::Debug,
     {
         let (stream, _) = Self::connect_with(switch, target, [PROTOCOL_IPFS_PING]).await?;

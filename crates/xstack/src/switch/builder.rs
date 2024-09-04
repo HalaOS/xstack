@@ -15,30 +15,30 @@ use crate::{
 
 use super::Switch;
 
-/// immutable context data for one switch.
-pub(super) struct ImmutableSwitch {
+/// The configuration of `Switch`.
+pub struct SwitchOptions {
     /// The value of rpc timeout.
-    pub(super) timeout: Duration,
+    pub timeout: Duration,
     /// This is a free-form string, identitying the implementation of the peer. The usual format is agent-name/version,
     /// where agent-name is the name of the program or library and version is its semantic version.
-    pub(super) agent_version: String,
+    pub agent_version: String,
     /// Maximun length of libp2p rpc packets.
-    pub(super) max_packet_size: usize,
+    pub max_packet_size: usize,
     /// A list of transport that this switch registered.
-    pub(super) transports: Vec<Transport>,
+    pub transports: Vec<Transport>,
     /// Keystore registered to this switch.
-    pub(super) keystore: KeyStore,
+    pub keystore: KeyStore,
     /// Peer book for this switch.
-    pub(super) peer_book: PeerBook,
+    pub peer_book: PeerBook,
     /// Connector for this switch.
-    pub(super) connector: Connector,
+    pub connector: Connector,
     /// StreamDispatcher for this switch.
-    pub(super) stream_dispatcher: StreamDispatcher,
+    pub stream_dispatcher: StreamDispatcher,
     /// EventMediator for this switch,
-    pub(super) event_mediator: EventMediator,
+    pub event_mediator: EventMediator,
 }
 
-impl ImmutableSwitch {
+impl SwitchOptions {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
             agent_version,
@@ -62,8 +62,7 @@ impl ImmutableSwitch {
 
 struct SwitchBuilderInner {
     laddrs: Vec<Multiaddr>,
-    early_inbound_stream_cached_size: usize,
-    immutable: ImmutableSwitch,
+    immutable: SwitchOptions,
 }
 
 /// A builder to create the `Switch` instance.
@@ -76,8 +75,7 @@ impl SwitchBuilder {
         Self {
             ops: Ok(SwitchBuilderInner {
                 laddrs: Default::default(),
-                early_inbound_stream_cached_size: 10,
-                immutable: ImmutableSwitch::new(agent_version),
+                immutable: SwitchOptions::new(agent_version),
             }),
         }
     }
@@ -88,17 +86,6 @@ impl SwitchBuilder {
     {
         self.and_then(|mut cfg| {
             cfg.immutable.connector = value.into();
-
-            Ok(cfg)
-        })
-    }
-
-    /// Set the `early_inbound_stream_cached_size`, the default value is `10`.
-    ///
-    /// This parameter limits the early inbound stream cache queue size.
-    pub fn early_inbound_stream_cached_size(self, value: usize) -> Self {
-        self.and_then(|mut cfg| {
-            cfg.early_inbound_stream_cached_size = value;
 
             Ok(cfg)
         })
@@ -212,7 +199,7 @@ impl SwitchBuilder {
             local_peer_id: Arc::new(public_key.to_peer_id()),
             public_key: Arc::new(public_key),
             mutable: Default::default(),
-            immutable: Arc::new(ops.immutable),
+            ops: Arc::new(ops.immutable),
         };
 
         for laddr in ops.laddrs {

@@ -389,8 +389,8 @@ impl<'a> RoutingAlogrithm for FindNode<'a> {
         let peer_id = peer_id.clone();
         let switch = self.router.ops.switch.clone();
         let target = self.target.clone();
-        let max_packet_size = switch.max_packet_size();
-        let timeout = switch.timeout();
+        let max_packet_size = switch.max_packet_size;
+        let timeout = switch.timeout;
         // let kbucket = self.router.kbucket.clone();
 
         async move {

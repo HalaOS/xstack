@@ -93,7 +93,7 @@ impl DriverTransport for CircuitTransport {
         let (mut stream, _) = switch.connect(&raddr, [PROTOCOL_CIRCUIT_RELAY_HOP]).await?;
 
         let limits =
-            CircuitV2Rpc::circuit_v2_hop_connect(&mut stream, &peer_id, switch.max_packet_size())
+            CircuitV2Rpc::circuit_v2_hop_connect(&mut stream, &peer_id, switch.max_packet_size)
                 .await?;
 
         log::trace!("circuit_v2, connection limits={:?}", limits);
@@ -322,7 +322,7 @@ impl CircuitStopServer {
     async fn handle_circuit_stop_incoming_stream(self, mut stream: ProtocolStream) {
         if let Err(err) = CircuitV2Rpc::circuit_v2_stop_connect_accept(
             &mut stream,
-            self.state.switch.max_packet_size(),
+            self.state.switch.max_packet_size,
         )
         .await
         {
