@@ -4,9 +4,9 @@ use std::{fmt::Debug, sync::Arc};
 use super::SwitchBuilder;
 use super::{builder::SwitchOptions, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
+use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use futures::{lock::Mutex, TryStreamExt};
-use futures_map::FuturesWaitMap;
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::listener_select_proto;
@@ -257,38 +257,28 @@ impl Switch {
     }
 
     async fn transport_connect_raddrs(&self, mut raddrs: Vec<Multiaddr>) -> Result<P2pConn> {
-        let mut last_error = None;
-
         raddrs.shuffle(&mut thread_rng());
 
-        let mut concurrency_connct = FuturesWaitMap::<Multiaddr, Result<P2pConn>>::new();
+        let mut stream = futures::stream::iter(raddrs)
+            .map(|raddr| (self.clone(), raddr))
+            .chunks(self.connect_replication)
+            .flat_map(|raddrs| {
+                let unordered = FuturesUnordered::new();
 
-        let tasks = raddrs.len();
+                for (switch, raddr) in raddrs {
+                    unordered.push(async move { switch.transport_connect_prv(&raddr).await });
+                }
 
-        for raddr in raddrs {
-            log::trace!("connect to {}", raddr);
-
-            let this = self.clone();
-
-            concurrency_connct.insert(raddr.clone(), async move {
-                this.transport_connect_prv(&raddr).await
+                unordered
             });
-        }
 
-        for _ in 0..tasks {
-            match concurrency_connct.next().await {
-                Some((raddr, Ok(conn))) => {
-                    log::trace!("connect to {}, established", raddr);
-                    return Ok(conn);
-                }
-                Some((raddr, Err(err))) => {
-                    last_error = {
-                        log::trace!("connect to {}, error: {}", raddr, err);
-                        Some(err)
-                    }
-                }
-                None => {
-                    break;
+        let mut last_error = None;
+
+        while let Some(r) = stream.next().await {
+            match r {
+                Ok(conn) => return Ok(conn),
+                Err(err) => {
+                    last_error = Some(err);
                 }
             }
         }

@@ -17,6 +17,8 @@ use super::Switch;
 
 /// The configuration of `Switch`.
 pub struct SwitchOptions {
+    /// The maximum number of concurrent connection tasks launched to a peer.
+    pub connect_replication: usize,
     /// The value of rpc timeout.
     pub timeout: Duration,
     /// This is a free-form string, identitying the implementation of the peer. The usual format is agent-name/version,
@@ -41,6 +43,7 @@ pub struct SwitchOptions {
 impl SwitchOptions {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
+            connect_replication: 5,
             agent_version,
             timeout: Duration::from_secs(5),
             max_packet_size: 1024 * 1024 * 4,
@@ -152,6 +155,16 @@ impl SwitchBuilder {
     pub fn max_packet_size(self, value: usize) -> Self {
         self.and_then(|mut cfg| {
             cfg.immutable.max_packet_size = value;
+
+            Ok(cfg)
+        })
+    }
+
+    /// Set the maximum number of concurrent connection tasks launched to a peer,
+    /// the default value is `5`
+    pub fn connect_replication(self, value: usize) -> Self {
+        self.and_then(|mut cfg| {
+            cfg.immutable.connect_replication = value;
 
             Ok(cfg)
         })
