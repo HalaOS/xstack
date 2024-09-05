@@ -24,6 +24,7 @@ use futures_quic::{
     QuicConn, QuicConnect, QuicListener, QuicListenerBind, QuicStream,
 };
 
+use uuid::Uuid;
 use xstack::{
     identity::PublicKey,
     multiaddr::{Multiaddr, Protocol, ToSockAddr},
@@ -230,7 +231,7 @@ impl QuicP2pConn {
         m_raddr.push(Protocol::QuicV1);
 
         Self {
-            id: format!("quic({:?})", conn.scid()),
+            id: Uuid::new_v4().to_string(),
             laddr: m_laddr,
             raddr: m_raddr,
             conn: Arc::new(conn),

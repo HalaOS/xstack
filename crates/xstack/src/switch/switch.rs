@@ -4,9 +4,9 @@ use std::{fmt::Debug, sync::Arc};
 use super::SwitchBuilder;
 use super::{builder::SwitchOptions, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use futures::{lock::Mutex, TryStreamExt};
+use futures_map::FuturesUnorderedMap;
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
 use multistream_select::listener_select_proto;
@@ -268,10 +268,14 @@ impl Switch {
             .map(|raddr| (self.clone(), raddr))
             .chunks(self.connect_replication)
             .flat_map(|raddrs| {
-                let unordered = FuturesUnordered::new();
+                let unordered = FuturesUnorderedMap::new();
+
+                // let unordered = FuturesUnordered::new();
 
                 for (switch, raddr) in raddrs {
-                    unordered.push(async move { switch.transport_connect_prv(&raddr).await });
+                    unordered.insert(raddr.clone(), async move {
+                        switch.transport_connect_prv(&raddr).await
+                    });
                 }
 
                 unordered
@@ -279,7 +283,7 @@ impl Switch {
 
         let mut last_error = None;
 
-        while let Some(r) = stream.next().await {
+        while let Some((_, r)) = stream.next().await {
             match r {
                 Ok(conn) => return Ok(conn),
                 Err(err) => {

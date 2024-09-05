@@ -17,6 +17,7 @@ futures-boring = { workspace = true }
 futures = { workspace = true }
 rasi = { workspace = true }
 futures-quic = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 rasi = { workspace = true, features = ["task-futures"] }

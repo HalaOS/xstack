@@ -70,25 +70,28 @@ impl RawConnPool {
     /// add a authenticated connection into the pool.
     fn add(&mut self, conn: P2pConn, inbound: bool) {
         let peer_id = conn.public_key().to_peer_id();
+        let peer_addr = conn.peer_addr().clone();
+        let id = conn.id().to_owned();
 
-        // if this is a outbound connection, create the raddr index.
-        if !inbound {
-            self.raddrs
-                .insert(conn.peer_addr().clone(), peer_id.clone());
+        if self.conns.insert(conn.id().to_owned(), conn).is_none() {
+            // if this is a outbound connection, create the raddr index.
+            if !inbound {
+                self.raddrs.insert(peer_addr, peer_id.clone());
+            }
+
+            if let Some(ids) = self.peers.get_mut(&peer_id) {
+                ids.push(id)
+            } else {
+                self.peers.insert(peer_id, vec![id]);
+            }
         }
-
-        if let Some(ids) = self.peers.get_mut(&peer_id) {
-            ids.push(conn.id().to_owned())
-        } else {
-            self.peers.insert(peer_id, vec![conn.id().to_owned()]);
-        }
-
-        self.conns.insert(conn.id().to_owned(), conn);
     }
 
     /// Remove a connection from the pool.
     fn remove(&mut self, id: &str) {
         if let Some(conn) = self.conns.remove(id) {
+            assert_eq!(id, conn.id());
+
             let peer_id = conn.public_key().to_peer_id();
 
             self.raddrs.remove(conn.peer_addr());
@@ -97,7 +100,7 @@ impl RawConnPool {
                 let (index, _) = ids
                     .iter()
                     .enumerate()
-                    .find(|(_, v)| v.as_str() == conn.id())
+                    .find(|(_, v)| v.as_str() == id)
                     .expect("consistency guarantee");
 
                 ids.remove(index);
@@ -108,7 +111,7 @@ impl RawConnPool {
     fn by_raddr(&mut self, raddr: &Multiaddr) -> Option<Vec<P2pConn>> {
         if let Some(peer_id) = self.raddrs.get(raddr) {
             if let Some(ids) = self.peers.get(peer_id) {
-                log::trace!("{:?}", ids);
+                log::trace!("by_raddr: {:?}", ids);
                 return Some(
                     ids.iter()
                         .map(|id| self.conns.get(id).expect("consistency guarantee").clone())
@@ -122,7 +125,7 @@ impl RawConnPool {
 
     fn by_peer_id(&mut self, peer_id: &PeerId) -> Option<Vec<P2pConn>> {
         if let Some(ids) = self.peers.get(peer_id) {
-            log::trace!("{:?}", ids);
+            log::trace!("by_peer_id: {:?}", ids);
             return Some(
                 ids.iter()
                     .map(|id| self.conns.get(id).expect("consistency guarantee").clone())
