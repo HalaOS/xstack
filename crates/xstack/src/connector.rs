@@ -58,6 +58,8 @@ driver_wrapper!(
 
 #[derive(Default)]
 struct RawConnPool {
+    /// maxiumn connections that this pool can contains.
+    max_pool_size: usize,
     /// The mapping from peer's listening address to peer_id
     raddrs: HashMap<Multiaddr, PeerId>,
     /// The mapping from peer_id to connection id list.
@@ -67,8 +69,32 @@ struct RawConnPool {
 }
 
 impl RawConnPool {
+    fn new(max_pool_size: usize) -> Self {
+        Self {
+            max_pool_size,
+            ..Default::default()
+        }
+    }
+
+    fn check_limits(&mut self) {
+        if self.conns.len() > self.max_pool_size {
+            let mut removed = vec![];
+
+            for (id, conn) in &self.conns {
+                if conn.is_closed() || conn.actives() == 0 {
+                    removed.push(id.clone());
+                }
+            }
+
+            for id in removed {
+                self.remove(&id);
+            }
+        }
+    }
+
     /// add a authenticated connection into the pool.
     fn add(&mut self, conn: P2pConn, inbound: bool) {
+        self.check_limits();
         let peer_id = conn.public_key().to_peer_id();
         let peer_addr = conn.peer_addr().clone();
         let id = conn.id().to_owned();
@@ -90,6 +116,8 @@ impl RawConnPool {
     /// Remove a connection from the pool.
     fn remove(&mut self, id: &str) {
         if let Some(conn) = self.conns.remove(id) {
+            log::trace!("remove conn {}", id);
+
             assert_eq!(id, conn.id());
 
             let peer_id = conn.public_key().to_peer_id();
@@ -137,9 +165,23 @@ impl RawConnPool {
 }
 
 /// The default [`Connector`] implementation for `Switch`.
-#[derive(Default)]
 pub struct ConnPool {
     raw: Arc<Mutex<RawConnPool>>,
+}
+
+impl Default for ConnPool {
+    fn default() -> Self {
+        Self::new(20)
+    }
+}
+
+impl ConnPool {
+    /// Create a new `ConnPool` with customise `max_pool_size`.
+    pub fn new(max_pool_size: usize) -> Self {
+        Self {
+            raw: Arc::new(Mutex::new(RawConnPool::new(max_pool_size))),
+        }
+    }
 }
 
 #[async_trait]
@@ -189,6 +231,11 @@ impl connector_syscall::DriverConnector for ConnPool {
 
     /// Put a connection with a successful handshake back into the connector pool.
     async fn authenticated(&self, conn: P2pConn, inbound: bool) {
+        log::trace!(
+            "authenticated, raddr={}, inbound={}",
+            conn.peer_addr(),
+            inbound
+        );
         self.raw.lock().await.add(conn, inbound);
     }
 }

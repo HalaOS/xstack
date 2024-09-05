@@ -66,7 +66,7 @@ pub trait ToEventArgument {
 }
 
 /// Variant of switch events.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Event {
     /// The connection state changed.
     Connected {
@@ -305,7 +305,7 @@ impl event_syscall::DriverEventMediator for SyncEventMediator {
             let mut disconnected = vec![];
 
             for (id, mut sender) in senders {
-                log::trace!("raise.... {}", id);
+                log::trace!("raise.... {}, {:?}", id, event);
                 if let Err(err) = sender.send(event.clone()).await {
                     log::warn!("dispatch event {} failed, {}", event.to_name(), err);
                     disconnected.push(id);
