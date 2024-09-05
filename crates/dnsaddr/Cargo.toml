@@ -17,6 +17,7 @@ xstack-quic = { workspace = true }
 async-trait = { workspace = true }
 futures-dnsv2 = { workspace = true, features = ["rasi"] }
 rand = { workspace = true }
+rasi = { workspace = true }
 
 [dev-dependencies]
 futures-test = { workspace = true }

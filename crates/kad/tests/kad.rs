@@ -51,13 +51,15 @@ async fn find_node() {
 
     AutoNatClient::bind_with(&switch);
 
-    let peer_id = PeerId::random();
+    loop {
+        let peer_id = PeerId::random();
 
-    let peer_info = kad.find_node(&peer_id).await.unwrap();
+        let peer_info = kad.find_node(&peer_id).await.unwrap();
 
-    log::info!("find_node: {}, {:?}", peer_id, peer_info);
+        log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
-    log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
+        log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
+    }
 }
 
 #[futures_test::test]

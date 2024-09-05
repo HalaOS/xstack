@@ -312,7 +312,9 @@ impl event_syscall::DriverEventMediator for SyncEventMediator {
                 }
             }
 
+            log::trace!("lock....");
             let mut raw = self.0.lock().await;
+            log::trace!("lock.... success");
 
             if let Some(map) = raw.get_mut(event.to_name()) {
                 for id in disconnected {

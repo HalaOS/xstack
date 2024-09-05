@@ -17,14 +17,16 @@
 //! [**IP and Name Resolution**]: https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution
 
 use std::io::Result;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_dnsv2::client::DnsLookup;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use rasi::timer::TimeoutExt;
 use xstack::multiaddr::Multiaddr;
 use xstack::transport_syscall::DriverTransport;
-use xstack::Switch;
+use xstack::{Error, Switch};
 use xstack::{P2pConn, TransportListener};
 
 /// A transport that resolve *name-based* multiaddrs into IP addresses.
@@ -74,7 +76,10 @@ impl DnsAddr {
             let mut cached = vec![];
 
             for addr in dnsaddrs.drain(..) {
-                let mut raddrs = dns_lookup(&self.0, &addr).await?;
+                let mut raddrs = dns_lookup(&self.0, &addr)
+                    .timeout(Duration::from_secs(5))
+                    .await
+                    .ok_or(Error::Timeout)??;
 
                 cached.append(&mut raddrs);
             }

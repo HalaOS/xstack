@@ -94,13 +94,13 @@ impl RawConnPool {
             self.raddrs.remove(conn.peer_addr());
 
             if let Some(ids) = self.peers.get_mut(&peer_id) {
-                if let Some((index, _)) = ids
+                let (index, _) = ids
                     .iter()
                     .enumerate()
                     .find(|(_, v)| v.as_str() == conn.id())
-                {
-                    ids.remove(index);
-                }
+                    .expect("consistency guarantee");
+
+                ids.remove(index);
             }
         }
     }
@@ -108,6 +108,7 @@ impl RawConnPool {
     fn by_raddr(&mut self, raddr: &Multiaddr) -> Option<Vec<P2pConn>> {
         if let Some(peer_id) = self.raddrs.get(raddr) {
             if let Some(ids) = self.peers.get(peer_id) {
+                log::trace!("{:?}", ids);
                 return Some(
                     ids.iter()
                         .map(|id| self.conns.get(id).expect("consistency guarantee").clone())
@@ -121,6 +122,7 @@ impl RawConnPool {
 
     fn by_peer_id(&mut self, peer_id: &PeerId) -> Option<Vec<P2pConn>> {
         if let Some(ids) = self.peers.get(peer_id) {
+            log::trace!("{:?}", ids);
             return Some(
                 ids.iter()
                     .map(|id| self.conns.get(id).expect("consistency guarantee").clone())
