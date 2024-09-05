@@ -21,10 +21,10 @@ impl MutableSwitch {
     }
 
     pub(super) fn listen_addrs(&self) -> Vec<Multiaddr> {
-        if self.nat == AutoNAT::NAT {
-            self.nat_addrs.clone()
-        } else {
-            self.laddrs.clone()
+        match self.nat {
+            AutoNAT::Public => self.laddrs.clone(),
+            AutoNAT::NAT => self.nat_addrs.clone(),
+            AutoNAT::Unknown => vec![],
         }
     }
 
