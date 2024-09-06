@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::{
     channel::mpsc::{channel, Sender},
     lock::Mutex,
-    SinkExt, Stream, StreamExt,
+    Stream, StreamExt,
 };
 use libp2p_identity::PeerId;
 use rasi::task::spawn_ok;
@@ -306,15 +306,17 @@ impl event_syscall::DriverEventMediator for SyncEventMediator {
 
             for (id, mut sender) in senders {
                 log::trace!("raise.... {}, {:?}", id, event);
-                if let Err(err) = sender.send(event.clone()).await {
-                    log::warn!("dispatch event {} failed, {}", event.to_name(), err);
-                    disconnected.push(id);
+
+                if let Err(err) = sender.try_send(event.clone()) {
+                    if err.is_disconnected() {
+                        disconnected.push(id);
+                    }
+
+                    log::warn!("dispatch event {} full", event.to_name());
                 }
             }
 
-            log::trace!("lock....");
             let mut raw = self.0.lock().await;
-            log::trace!("lock.... success");
 
             if let Some(map) = raw.get_mut(event.to_name()) {
                 for id in disconnected {

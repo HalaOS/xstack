@@ -1,5 +1,6 @@
-use std::{str::FromStr, sync::Once};
+use std::{str::FromStr, sync::Once, time::Duration};
 
+use rasi::timer::sleep;
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 use xstack::{
     global_switch,
@@ -59,6 +60,8 @@ async fn find_node() {
         log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
         log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
+
+        sleep(Duration::from_secs(60)).await;
     }
 }
 
