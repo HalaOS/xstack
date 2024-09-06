@@ -115,7 +115,7 @@ impl RawConnPool {
 
     /// Remove a connection from the pool.
     fn remove(&mut self, id: &str) {
-        if let Some(conn) = self.conns.remove(id) {
+        if let Some(mut conn) = self.conns.remove(id) {
             log::trace!("remove conn {}", id);
 
             assert_eq!(id, conn.id());
@@ -132,6 +132,10 @@ impl RawConnPool {
                     .expect("consistency guarantee");
 
                 ids.remove(index);
+            }
+
+            if !conn.is_closed() {
+                _ = conn.close();
             }
         }
     }

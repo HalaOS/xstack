@@ -1,6 +1,7 @@
-use std::{str::FromStr, sync::Once, time::Duration};
+use std::{str::FromStr, sync::Once};
 
-use rasi::timer::sleep;
+use hala_pprof_memory::report::snapshot;
+
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 use xstack::{
     global_switch,
@@ -36,6 +37,11 @@ async fn init() -> Switch {
 
 #[futures_test::test]
 async fn find_node() {
+    use hala_pprof_memory::PprofAlloc;
+
+    #[global_allocator]
+    static ALLOC: PprofAlloc = PprofAlloc;
+
     let switch = init().await;
 
     let kad = KademliaRouter::with(&switch)
@@ -61,7 +67,7 @@ async fn find_node() {
 
         log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
 
-        sleep(Duration::from_secs(60)).await;
+        snapshot();
     }
 }
 

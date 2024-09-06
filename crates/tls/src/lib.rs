@@ -318,7 +318,7 @@ impl DriverConnection for TlsConn {
         .into())
     }
 
-    async fn close(&mut self) -> Result<()> {
+    fn close(&mut self) -> Result<()> {
         self.conn.close(Reason::Normal)?;
 
         Ok(())

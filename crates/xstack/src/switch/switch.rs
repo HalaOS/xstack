@@ -66,7 +66,7 @@ impl Switch {
                         conn.local_addr(),
                         err
                     );
-                    _ = conn.close().await;
+                    _ = conn.close();
                 } else {
                     log::trace!(
                         "setup connection, peer={}, local={}",
@@ -98,7 +98,7 @@ impl Switch {
                     this_conn.local_addr(),
                     err
                 );
-                _ = this_conn.close().await;
+                _ = this_conn.close();
             } else {
                 log::info!(
                     "incoming stream loop stopped, peer={}, local={}",
@@ -229,7 +229,7 @@ impl Switch {
 
                 if let Err(err) = self.handshake(&mut conn).await {
                     log::error!("{}, setup error: {}", raddr, err);
-                    _ = conn.close().await;
+                    _ = conn.close();
                     return Err(err);
                 } else {
                     log::trace!("{}, setup success", raddr);

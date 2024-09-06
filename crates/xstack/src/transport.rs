@@ -155,7 +155,7 @@ pub mod transport_syscall {
         async fn connect(&mut self) -> Result<super::ProtocolStream>;
 
         /// Close the unerlying socket.
-        async fn close(&mut self) -> Result<()>;
+        fn close(&mut self) -> Result<()>;
 
         /// Returns true if this connection is closed or is closing.
         fn is_closed(&self) -> bool;

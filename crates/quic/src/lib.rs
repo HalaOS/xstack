@@ -292,7 +292,7 @@ impl DriverConnection for QuicP2pConn {
         .into())
     }
 
-    async fn close(&mut self) -> io::Result<()> {
+    fn close(&mut self) -> io::Result<()> {
         self.conn.close()?;
 
         self.is_closed.store(true, Ordering::Relaxed);
