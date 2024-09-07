@@ -1,6 +1,8 @@
 //! A [***libp2p TCP transport protocol with TLS encryption***](https://docs.libp2p.io/concepts/secure-comm/tls/) implementation.
 
 use std::io::Result;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
@@ -14,10 +16,19 @@ use xstack::{P2pConn, TransportListener};
 use xstack_tls::{TlsConn, TlsListener};
 
 /// The libp2p tcp transport implementation.
-pub struct TcpTransport;
+#[derive(Default)]
+pub struct TcpTransport {
+    actives: Arc<AtomicUsize>,
+}
 
 #[async_trait]
 impl DriverTransport for TcpTransport {
+    fn name(&self) -> &str {
+        "tcp"
+    }
+    fn activities(&self) -> usize {
+        self.actives.load(Ordering::Relaxed)
+    }
     async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
         let listener = TcpListener::bind(laddr.to_sockaddr()?).await?;
 
@@ -45,9 +56,14 @@ impl DriverTransport for TcpTransport {
             }
         });
 
-        Ok(TlsListener::new(&switch, local_addr, Box::pin(incoming))
-            .await?
-            .into())
+        Ok(TlsListener::new(
+            &switch,
+            local_addr,
+            Box::pin(incoming),
+            self.actives.clone(),
+        )
+        .await?
+        .into())
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
@@ -60,7 +76,14 @@ impl DriverTransport for TcpTransport {
             .with(Protocol::Tcp(local_addr.port()))
             .with(Protocol::Tls);
 
-        let conn = TlsConn::connect(&switch, stream, local_addr, raddr.clone()).await?;
+        let conn = TlsConn::connect(
+            &switch,
+            stream,
+            local_addr,
+            raddr.clone(),
+            self.actives.clone(),
+        )
+        .await?;
 
         Ok(conn.into())
     }
@@ -99,7 +122,7 @@ mod tests {
     impl TransportSpecContext for TcpMock {
         async fn create_switch(&self) -> Result<Switch> {
             let switch = Switch::new("test")
-                .transport(TcpTransport)
+                .transport(TcpTransport::default())
                 .transport_bind(["/ip4/127.0.0.1/tcp/0"])
                 .create()
                 .await?;

@@ -94,18 +94,30 @@ async fn create_quic_config(host_key: &KeyStore, timeout: Duration) -> io::Resul
 }
 
 /// A libp2p transport backed quic protocol.
-pub struct QuicTransport(pub Duration);
+pub struct QuicTransport {
+    timeout: Duration,
+    activities: Arc<AtomicUsize>,
+}
 
 impl Default for QuicTransport {
     fn default() -> Self {
-        Self(Duration::from_secs(5))
+        Self {
+            timeout: Duration::from_secs(5),
+            activities: Default::default(),
+        }
     }
 }
 
 #[async_trait]
 impl DriverTransport for QuicTransport {
+    fn name(&self) -> &str {
+        "quic"
+    }
+    fn activities(&self) -> usize {
+        self.activities.load(Ordering::Relaxed)
+    }
     async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
-        let quic_config = create_quic_config(&switch.keystore, self.0).await?;
+        let quic_config = create_quic_config(&switch.keystore, self.timeout).await?;
 
         let laddrs = laddr.to_sockaddr()?;
 
@@ -113,12 +125,12 @@ impl DriverTransport for QuicTransport {
 
         let laddr = listener.local_addrs().next().unwrap().clone();
 
-        Ok(QuicP2pListener::new(listener, laddr).into())
+        Ok(QuicP2pListener::new(listener, laddr, self.activities.clone()).into())
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
     async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn> {
-        let mut quic_config = create_quic_config(&switch.keystore, self.0).await?;
+        let mut quic_config = create_quic_config(&switch.keystore, self.timeout).await?;
 
         let raddr = raddr.to_sockaddr()?;
 
@@ -142,7 +154,7 @@ impl DriverTransport for QuicTransport {
 
         let public_key = xstack_x509::verify(cert)?;
 
-        let conn = QuicP2pConn::new(laddr, raddr, conn, public_key);
+        let conn = QuicP2pConn::new(laddr, raddr, conn, public_key, self.activities.clone());
 
         Ok(conn.into())
     }
@@ -170,11 +182,16 @@ impl DriverTransport for QuicTransport {
 struct QuicP2pListener {
     listener: QuicListener,
     laddr: SocketAddr,
+    conn_counter: Arc<AtomicUsize>,
 }
 
 impl QuicP2pListener {
-    fn new(listener: QuicListener, laddr: SocketAddr) -> Self {
-        Self { laddr, listener }
+    fn new(listener: QuicListener, laddr: SocketAddr, conn_counter: Arc<AtomicUsize>) -> Self {
+        Self {
+            laddr,
+            listener,
+            conn_counter,
+        }
     }
 }
 
@@ -196,7 +213,14 @@ impl DriverListener for QuicP2pListener {
             "quic: peer path not found",
         ))?;
 
-        Ok(QuicP2pConn::new(self.laddr.clone(), peer_addr, conn, public_key).into())
+        Ok(QuicP2pConn::new(
+            self.laddr.clone(),
+            peer_addr,
+            conn,
+            public_key,
+            self.conn_counter.clone(),
+        )
+        .into())
     }
 
     /// Returns the local address that this listener is bound to.
@@ -217,10 +241,25 @@ struct QuicP2pConn {
     public_key: PublicKey,
     id: String,
     counter: Arc<AtomicUsize>,
+    activities: Arc<AtomicUsize>,
+}
+
+impl Drop for QuicP2pConn {
+    fn drop(&mut self) {
+        self.activities.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 impl QuicP2pConn {
-    fn new(laddr: SocketAddr, raddr: SocketAddr, conn: QuicConn, public_key: PublicKey) -> Self {
+    fn new(
+        laddr: SocketAddr,
+        raddr: SocketAddr,
+        conn: QuicConn,
+        public_key: PublicKey,
+        activities: Arc<AtomicUsize>,
+    ) -> Self {
+        activities.fetch_add(1, Ordering::Relaxed);
+
         let mut m_laddr = Multiaddr::from(laddr.ip());
         m_laddr.push(Protocol::Udp(laddr.port()));
         m_laddr.push(Protocol::QuicV1);
@@ -236,6 +275,7 @@ impl QuicP2pConn {
             conn: Arc::new(conn),
             public_key,
             counter: Default::default(),
+            activities,
         }
     }
 }
@@ -303,6 +343,7 @@ impl DriverConnection for QuicP2pConn {
 
     /// Creates a new independently owned handle to the underlying socket.
     fn clone(&self) -> P2pConn {
+        self.activities.fetch_add(1, Ordering::Relaxed);
         Clone::clone(self).into()
     }
 

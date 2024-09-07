@@ -80,14 +80,22 @@ pub struct TlsListener<Incoming> {
     incoming: Incoming,
     /// ssl acceptor from boring crate.
     ssl_acceptor: SslAcceptor,
+    /// the counter for actives connections.
+    activities: Arc<AtomicUsize>,
 }
 
 impl<Incoming> TlsListener<Incoming> {
     /// Create a new `TlsListener` instance.
-    pub async fn new(switch: &Switch, local_addr: Multiaddr, incoming: Incoming) -> Result<Self> {
+    pub async fn new(
+        switch: &Switch,
+        local_addr: Multiaddr,
+        incoming: Incoming,
+        activities: Arc<AtomicUsize>,
+    ) -> Result<Self> {
         let ssl_acceptor = create_ssl_acceptor(switch).await?;
 
         Ok(Self {
+            activities,
             ssl_acceptor,
             incoming,
             local_addr,
@@ -110,11 +118,15 @@ where
             }
         };
 
-        Ok(
-            TlsConn::accept(stream, self.local_addr.clone(), raddr, &self.ssl_acceptor)
-                .await?
-                .into(),
+        Ok(TlsConn::accept(
+            stream,
+            self.local_addr.clone(),
+            raddr,
+            &self.ssl_acceptor,
+            self.activities.clone(),
         )
+        .await?
+        .into())
     }
 
     /// Returns the local address that this listener is bound to.
@@ -132,6 +144,13 @@ pub struct TlsConn {
     peer_addr: Multiaddr,
     conn: Arc<YamuxConn>,
     stream_count: Arc<AtomicUsize>,
+    activities: Arc<AtomicUsize>,
+}
+
+impl Drop for TlsConn {
+    fn drop(&mut self) {
+        self.activities.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 impl TlsConn {
@@ -141,6 +160,7 @@ impl TlsConn {
         mut stream: S,
         local_addr: Multiaddr,
         peer_addr: Multiaddr,
+        actives: Arc<AtomicUsize>,
     ) -> Result<Self>
     where
         S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
@@ -202,7 +222,7 @@ impl TlsConn {
 
         let (_, _) = dialer_select_proto(&mut stream, ["/yamux/1.0.0"], Version::V1).await?;
 
-        let conn = TlsConn::new(stream, false, public_key, local_addr, peer_addr)?;
+        let conn = TlsConn::new(stream, false, public_key, local_addr, peer_addr, actives)?;
 
         Ok(conn.into())
     }
@@ -212,6 +232,7 @@ impl TlsConn {
         local_addr: Multiaddr,
         peer_addr: Multiaddr,
         acceptor: &SslAcceptor,
+        actives: Arc<AtomicUsize>,
     ) -> Result<Self>
     where
         S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
@@ -231,7 +252,7 @@ impl TlsConn {
 
         let (_, _) = listener_select_proto(&mut stream, ["/yamux/1.0.0"]).await?;
 
-        let conn = TlsConn::new(stream, true, public_key, local_addr, peer_addr)?;
+        let conn = TlsConn::new(stream, true, public_key, local_addr, peer_addr, actives)?;
 
         Ok(conn.into())
     }
@@ -242,10 +263,13 @@ impl TlsConn {
         public_key: PublicKey,
         local_addr: Multiaddr,
         peer_addr: Multiaddr,
+        activities: Arc<AtomicUsize>,
     ) -> Result<Self>
     where
         S: AsyncRead + AsyncWrite + Sync + Send + 'static,
     {
+        activities.fetch_add(1, Ordering::Relaxed);
+
         let (read, write) = stream.split();
         let conn = futures_yamux::YamuxConn::new_with(INIT_WINDOW_SIZE, is_server, read, write);
 
@@ -256,6 +280,7 @@ impl TlsConn {
             public_key,
             id: Uuid::new_v4().to_string(),
             stream_count: Default::default(),
+            activities,
         })
     }
 }
@@ -287,6 +312,7 @@ impl DriverConnection for TlsConn {
     }
 
     fn clone(&self) -> P2pConn {
+        self.activities.fetch_add(1, Ordering::Relaxed);
         Clone::clone(self).into()
     }
 

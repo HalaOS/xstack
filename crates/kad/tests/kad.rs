@@ -26,7 +26,7 @@ async fn init() -> Switch {
 
     Switch::new("kad-test")
         .transport(QuicTransport::default())
-        .transport(TcpTransport)
+        .transport(TcpTransport::default())
         .transport(DnsAddr::new().await.unwrap())
         .create()
         .await
@@ -64,11 +64,25 @@ async fn find_node() {
 
         log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
+        let mut transport_status = String::new();
+
+        use std::fmt::Write;
+
+        for transport in &switch.transports {
+            _ = write!(
+                &mut transport_status,
+                "{}({}), ",
+                transport.name(),
+                transport.activities()
+            );
+        }
+
         log::info!(
-            "kad({}), autonat({:?}), connector({})",
+            "kad({}), autonat({:?}), connector({}), {}",
             kad.len(),
             switch.nat().await,
-            switch.connector.cached().await
+            switch.connector.cached().await,
+            transport_status,
         );
 
         snapshot();

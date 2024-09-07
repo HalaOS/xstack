@@ -404,7 +404,7 @@ mod tests {
 
             Switch::new("kad-test")
                 .transport(QuicTransport::default())
-                .transport(TcpTransport)
+                .transport(TcpTransport::default())
                 .transport(DnsAddr::new().await.unwrap())
                 .create()
                 .await

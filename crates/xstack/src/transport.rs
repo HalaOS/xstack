@@ -121,6 +121,12 @@ pub mod transport_syscall {
 
         /// Check if this transport support the protocol stack represented by the `addr`.
         fn multiaddr_hit(&self, addr: &Multiaddr) -> bool;
+
+        /// Returns the actives connection number.
+        fn activities(&self) -> usize;
+
+        /// Returns the transport's display name.
+        fn name(&self) -> &str;
     }
 
     /// A server-side socket that accept new incoming stream.

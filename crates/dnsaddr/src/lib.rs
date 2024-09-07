@@ -102,6 +102,12 @@ impl DnsAddr {
 #[allow(unused)]
 #[async_trait]
 impl DriverTransport for DnsAddr {
+    fn name(&self) -> &str {
+        "dnsaddr"
+    }
+    fn activities(&self) -> usize {
+        0
+    }
     /// Create a server-side socket with provided [`laddr`](Multiaddr).
     async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> Result<TransportListener> {
         panic!("DnsAddr is not support for `DriverTransport::bind` fn.");

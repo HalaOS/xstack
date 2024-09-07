@@ -3,7 +3,7 @@ use std::{
     num::NonZeroUsize,
     ops::Deref,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
 };
@@ -50,15 +50,24 @@ use crate::{CircuitV2Rpc, Error, Result, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CI
 /// [**circuit_v2**]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#hop-protocol
 ///
 #[derive(Default)]
-pub struct CircuitTransport(AtomicBool);
+pub struct CircuitTransport {
+    reentrancy_guard: AtomicBool,
+    activities: Arc<AtomicUsize>,
+}
 
 #[allow(unused)]
 #[async_trait]
 impl DriverTransport for CircuitTransport {
+    fn name(&self) -> &str {
+        "circuit"
+    }
+    fn activities(&self) -> usize {
+        self.activities.load(Ordering::Relaxed)
+    }
     /// Create a server-side socket with provided [`laddr`](Multiaddr).
     async fn bind(&self, switch: &Switch, laddr: &Multiaddr) -> std::io::Result<TransportListener> {
         if self
-            .0
+            .reentrancy_guard
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
             .is_err()
         {
@@ -68,7 +77,11 @@ impl DriverTransport for CircuitTransport {
             ));
         }
 
-        Ok(CircuitListener::new(&switch, laddr.clone()).await?.into())
+        Ok(
+            CircuitListener::new(&switch, laddr.clone(), self.activities.clone())
+                .await?
+                .into(),
+        )
     }
 
     /// Connect to peer with remote peer [`raddr`](Multiaddr).
@@ -100,7 +113,14 @@ impl DriverTransport for CircuitTransport {
 
         let local_addr = stream.local_addr().clone();
 
-        let conn = TlsConn::connect(&switch, stream, local_addr, peer_addr).await?;
+        let conn = TlsConn::connect(
+            &switch,
+            stream,
+            local_addr,
+            peer_addr,
+            self.activities.clone(),
+        )
+        .await?;
 
         log::trace!("circuit_v2, connection handshaked");
 
@@ -265,10 +285,11 @@ impl CircuitHopClient {
 struct CircuitStopServer {
     ssl_acceptor: SslAcceptor,
     state: CircuitTransportState,
+    actives: Arc<AtomicUsize>,
 }
 
 impl CircuitStopServer {
-    async fn bind(switch: &Switch) -> Result<CircuitTransportState> {
+    async fn bind(switch: &Switch, actives: Arc<AtomicUsize>) -> Result<CircuitTransportState> {
         let listener = switch.bind([PROTOCOL_CIRCUIT_RELAY_STOP]).await?;
 
         let ssl_acceptor = create_ssl_acceptor(&switch).await?;
@@ -286,6 +307,7 @@ impl CircuitStopServer {
             Self {
                 ssl_acceptor,
                 state: state.clone(),
+                actives,
             }
             .run_loop(listener),
         );
@@ -338,8 +360,14 @@ impl CircuitStopServer {
         let local_addr = stream.local_addr().clone();
         let peer_addr = stream.peer_addr().clone();
 
-        let conn = match TlsConn::accept(stream, local_addr, peer_addr.clone(), &self.ssl_acceptor)
-            .await
+        let conn = match TlsConn::accept(
+            stream,
+            local_addr,
+            peer_addr.clone(),
+            &self.ssl_acceptor,
+            self.actives.clone(),
+        )
+        .await
         {
             Ok(conn) => conn,
             Err(err) => {
@@ -376,8 +404,12 @@ impl Drop for CircuitListener {
 }
 
 impl CircuitListener {
-    async fn new(switch: &Switch, local_addr: Multiaddr) -> Result<Self> {
-        let state = CircuitStopServer::bind(switch).await?;
+    async fn new(
+        switch: &Switch,
+        local_addr: Multiaddr,
+        actives: Arc<AtomicUsize>,
+    ) -> Result<Self> {
+        let state = CircuitStopServer::bind(switch, actives).await?;
 
         CircuitHopClient::bind(&switch, &state).await;
 

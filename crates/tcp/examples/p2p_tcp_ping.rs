@@ -61,7 +61,7 @@ async fn run_client() -> xstack::Result<()> {
     const VERSION: &str = env!("CARGO_PKG_VERSION");
 
     let switch = Switch::new(format!("rp2p-{}", VERSION))
-        .transport(TcpTransport)
+        .transport(TcpTransport::default())
         .create()
         .await?;
 
