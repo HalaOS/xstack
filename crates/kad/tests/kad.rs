@@ -1,7 +1,5 @@
 use std::{str::FromStr, sync::Once};
 
-use hala_pprof_memory::report::snapshot;
-
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 use xstack::{
     global_switch,
@@ -37,10 +35,11 @@ async fn init() -> Switch {
 
 #[futures_test::test]
 async fn find_node() {
-    use hala_pprof_memory::PprofAlloc;
+    // use hala_pprof_memory::PprofAlloc;
+    // use hala_pprof_memory::report::snapshot;
 
-    #[global_allocator]
-    static ALLOC: PprofAlloc = PprofAlloc;
+    // #[global_allocator]
+    // static ALLOC: PprofAlloc = PprofAlloc;
 
     let switch = init().await;
 
@@ -65,9 +64,14 @@ async fn find_node() {
 
         log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
-        log::info!("kad({}), autonat({:?})", kad.len(), switch.nat().await);
+        log::info!(
+            "kad({}), autonat({:?}), connector({})",
+            kad.len(),
+            switch.nat().await,
+            switch.connector.cached().await
+        );
 
-        snapshot();
+        // snapshot();
     }
 }
 

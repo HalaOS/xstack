@@ -48,6 +48,9 @@ pub mod connector_syscall {
 
         /// Put a connection with a successful handshake back into the connector pool.
         async fn authenticated(&self, conn: P2pConn, inbound: bool);
+
+        /// Return the connector pool size.
+        async fn cached(&self) -> usize;
     }
 }
 
@@ -125,13 +128,9 @@ impl RawConnPool {
             self.raddrs.remove(conn.peer_addr());
 
             if let Some(ids) = self.peers.get_mut(&peer_id) {
-                let (index, _) = ids
-                    .iter()
-                    .enumerate()
-                    .find(|(_, v)| v.as_str() == id)
-                    .expect("consistency guarantee");
-
-                ids.remove(index);
+                if let Some((index, _)) = ids.iter().enumerate().find(|(_, v)| v.as_str() == id) {
+                    ids.remove(index);
+                }
             }
 
             if !conn.is_closed() {
@@ -165,6 +164,10 @@ impl RawConnPool {
             );
         }
         return None;
+    }
+
+    fn len(&self) -> usize {
+        self.conns.len()
     }
 }
 
@@ -241,5 +244,9 @@ impl connector_syscall::DriverConnector for ConnPool {
             inbound
         );
         self.raw.lock().await.add(conn, inbound);
+    }
+
+    async fn cached(&self) -> usize {
+        self.raw.lock().await.len()
     }
 }

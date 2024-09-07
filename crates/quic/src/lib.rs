@@ -5,7 +5,7 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc,
     },
     task::{Context, Poll},
@@ -215,7 +215,6 @@ struct QuicP2pConn {
     raddr: Multiaddr,
     conn: Arc<QuicConn>,
     public_key: PublicKey,
-    is_closed: Arc<AtomicBool>,
     id: String,
     counter: Arc<AtomicUsize>,
 }
@@ -236,7 +235,6 @@ impl QuicP2pConn {
             raddr: m_raddr,
             conn: Arc::new(conn),
             public_key,
-            is_closed: Default::default(),
             counter: Default::default(),
         }
     }
@@ -295,14 +293,12 @@ impl DriverConnection for QuicP2pConn {
     fn close(&mut self) -> io::Result<()> {
         self.conn.close()?;
 
-        self.is_closed.store(true, Ordering::Relaxed);
-
         Ok(())
     }
 
     /// Returns true if this connection is closed or is closing.
     fn is_closed(&self) -> bool {
-        self.is_closed.load(Ordering::Relaxed)
+        self.conn.is_closed()
     }
 
     /// Creates a new independently owned handle to the underlying socket.

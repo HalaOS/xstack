@@ -64,3 +64,5 @@ xstack-kad = { path = "crates/kad", version = "^0.2" }
 xstack-dnsaddr = { path = "crates/dnsaddr", version = "^0.2" }
 xstack-autonat = { path = "crates/autonat", version = "^0.2" }
 xstack-tls = { path = "crates/tls", version = "^0.2" }
+#pprof
+hala-pprof-memory = { version = "^0.2" }
