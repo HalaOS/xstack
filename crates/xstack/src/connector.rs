@@ -127,9 +127,13 @@ impl RawConnPool {
 
             self.raddrs.remove(conn.peer_addr());
 
-            if let Some(ids) = self.peers.get_mut(&peer_id) {
+            if let Some(mut ids) = self.peers.remove(&peer_id) {
                 if let Some((index, _)) = ids.iter().enumerate().find(|(_, v)| v.as_str() == id) {
                     ids.remove(index);
+                }
+
+                if !ids.is_empty() {
+                    self.peers.insert(peer_id, ids);
                 }
             }
 
@@ -167,6 +171,7 @@ impl RawConnPool {
     }
 
     fn len(&self) -> usize {
+        log::trace!(target:"len","conn({}), peers({}), raddrs({})",self.conns.len(),self.peers.len(),self.raddrs.len());
         self.conns.len()
     }
 }

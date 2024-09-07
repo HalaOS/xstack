@@ -35,11 +35,11 @@ async fn init() -> Switch {
 
 #[futures_test::test]
 async fn find_node() {
-    // use hala_pprof_memory::PprofAlloc;
-    // use hala_pprof_memory::report::snapshot;
+    use hala_pprof_memory::report::snapshot;
+    use hala_pprof_memory::PprofAlloc;
 
-    // #[global_allocator]
-    // static ALLOC: PprofAlloc = PprofAlloc;
+    #[global_allocator]
+    static ALLOC: PprofAlloc = PprofAlloc;
 
     let switch = init().await;
 
@@ -71,7 +71,7 @@ async fn find_node() {
             switch.connector.cached().await
         );
 
-        // snapshot();
+        snapshot();
     }
 }
 
