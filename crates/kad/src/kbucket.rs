@@ -12,7 +12,7 @@ use futures::{lock::Mutex, StreamExt};
 use generic_array::GenericArray;
 
 use rasi::task::spawn_ok;
-use xstack::{events, identity::PeerId, EventSource, Switch};
+use xstack::{events, identity::PeerId, EventSource, ProtocolStream, Switch};
 
 use crate::{Error, Result};
 
@@ -254,6 +254,8 @@ impl<const K: usize> KBucketTable<K> {
 
         if r.is_none() {
             self.len.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.len.fetch_sub(1, Ordering::Relaxed);
         }
 
         r
@@ -308,16 +310,18 @@ impl<const K: usize> KBucketTable<K> {
     ///
     /// [**paper**]: https://doi.org/10.1007/3-540-45748-8_5
     pub async fn insert(&self, peer_id: PeerId) {
-        if let Some(_lru) = self.insert_prv(peer_id.clone()).await {
-            // spawn_ok(async move {
-            //     // ping the lru to decide what to do.
-            //     if let Err(err) = ProtocolStream::ping_with(&this.switch, &lru).await {
-            //         log::trace!("ping lru node, {}", err);
-            //         this.insert_prv(lru.clone()).await;
-            //     } else {
-            //         this.insert_prv(peer_id).await;
-            //     }
-            // });
+        if let Some(lru) = self.insert_prv(peer_id.clone()).await {
+            let this = self.clone();
+
+            spawn_ok(async move {
+                // ping the lru to decide what to do.
+                if let Err(err) = ProtocolStream::ping_with(&this.switch, &lru).await {
+                    log::trace!("ping lru node, {}", err);
+                    this.insert_prv(lru.clone()).await;
+                } else {
+                    this.insert_prv(peer_id).await;
+                }
+            });
 
             // let this = self.clone();
 
