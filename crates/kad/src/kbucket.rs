@@ -150,12 +150,12 @@ impl<const K: usize> RawKBucketTable<K> {
             let r = self.k_buckets[index].try_insert(peer_id);
 
             if r.is_none() {
-                log::trace!(target:"kad","peer_id={}, insert k-bucket({})", peer_id, k_index);
+                log::trace!("peer_id={}, insert k-bucket({})", peer_id, k_index);
             }
 
             r
         } else {
-            log::trace!(target:"kad","peer_id={}, insert k-bucket({})", peer_id, k_index,);
+            log::trace!("peer_id={}, insert k-bucket({})", peer_id, k_index,);
             self.k_buckets.push(KBucket::new(peer_id));
             self.k_index[k_index] = Some(self.k_buckets.len() - 1);
             None
