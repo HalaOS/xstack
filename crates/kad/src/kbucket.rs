@@ -12,7 +12,7 @@ use futures::{lock::Mutex, StreamExt};
 use generic_array::GenericArray;
 
 use rasi::task::spawn_ok;
-use xstack::{events, identity::PeerId, EventSource, ProtocolStream, Switch};
+use xstack::{events, identity::PeerId, EventSource, Switch};
 
 use crate::{Error, Result};
 
@@ -239,6 +239,7 @@ impl<const K: usize> RawKBucketTable<K> {
 /// [`PeerId`]: xstack::identity::PeerId
 #[derive(Clone)]
 pub struct KBucketTable<const K: usize = 20> {
+    #[allow(unused)]
     /// The switch instance to which this table belongs
     switch: Switch,
     /// the size of this table,
@@ -307,7 +308,7 @@ impl<const K: usize> KBucketTable<K> {
     ///
     /// [**paper**]: https://doi.org/10.1007/3-540-45748-8_5
     pub async fn insert(&self, peer_id: PeerId) {
-        if let Some(lru) = self.insert_prv(peer_id.clone()).await {
+        if let Some(_lru) = self.insert_prv(peer_id.clone()).await {
             // spawn_ok(async move {
             //     // ping the lru to decide what to do.
             //     if let Err(err) = ProtocolStream::ping_with(&this.switch, &lru).await {
@@ -318,15 +319,15 @@ impl<const K: usize> KBucketTable<K> {
             //     }
             // });
 
-            let this = self.clone();
+            // let this = self.clone();
 
-            // ping the lru to decide what to do.
-            if let Err(err) = ProtocolStream::ping_with(&this.switch, &lru).await {
-                log::trace!("ping lru node, {}", err);
-                this.insert_prv(lru).await;
-            } else {
-                this.insert_prv(peer_id).await;
-            }
+            // // ping the lru to decide what to do.
+            // if let Err(err) = ProtocolStream::ping_with(&this.switch, &lru).await {
+            //     log::trace!("ping lru node, {}", err);
+            //     this.insert_prv(lru).await;
+            // } else {
+            //     this.insert_prv(peer_id).await;
+            // }
         }
     }
 

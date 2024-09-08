@@ -43,7 +43,7 @@ pub struct SwitchOptions {
 impl SwitchOptions {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
-            connect_replication: 5,
+            connect_replication: 1,
             agent_version,
             timeout: Duration::from_secs(5),
             max_packet_size: 1024 * 1024 * 4,
