@@ -14,7 +14,7 @@ use generic_array::GenericArray;
 use rasi::task::spawn_ok;
 use xstack::{events, identity::PeerId, EventSource, ProtocolStream, Switch};
 
-use crate::{Error, Result};
+use crate::Result;
 
 mod uint {
     use uint::construct_uint;
@@ -42,7 +42,7 @@ impl<const K: usize> KBucket<K> {
         {
             self.0.remove(index);
             self.0.push_back(peer_id);
-            return None;
+            return Some(peer_id);
         }
 
         if self.0.len() == K {
@@ -150,12 +150,12 @@ impl<const K: usize> RawKBucketTable<K> {
             let r = self.k_buckets[index].try_insert(peer_id);
 
             if r.is_none() {
-                log::trace!("peer_id={}, insert k-bucket({})", peer_id, k_index);
+                log::trace!(target:"kad","peer_id={}, insert k-bucket({})", peer_id, k_index);
             }
 
             r
         } else {
-            log::trace!("peer_id={}, insert k-bucket({})", peer_id, k_index,);
+            log::trace!(target:"kad","peer_id={}, insert k-bucket({})", peer_id, k_index,);
             self.k_buckets.push(KBucket::new(peer_id));
             self.k_index[k_index] = Some(self.k_buckets.len() - 1);
             None
@@ -163,10 +163,7 @@ impl<const K: usize> RawKBucketTable<K> {
     }
 
     fn closest(&mut self, key: KBucketKey) -> Result<Vec<PeerId>> {
-        let k_index = key
-            .distance(&self.local_key)
-            .k_index()
-            .ok_or(Error::Closest)? as usize;
+        let k_index = key.distance(&self.local_key).k_index().unwrap_or(1) as usize;
 
         let mut peers = vec![];
 
@@ -238,7 +235,7 @@ impl<const K: usize> RawKBucketTable<K> {
 /// [`lookup_peer_info`]: xstack::Switch::lookup_peer_info
 /// [`PeerId`]: xstack::identity::PeerId
 #[derive(Clone)]
-pub struct KBucketTable<const K: usize = 20> {
+pub struct KBucketTable<const K: usize> {
     #[allow(unused)]
     /// The switch instance to which this table belongs
     switch: Switch,
@@ -250,15 +247,19 @@ pub struct KBucketTable<const K: usize = 20> {
 
 impl<const K: usize> KBucketTable<K> {
     async fn insert_prv(&self, peer_id: PeerId) -> Option<PeerId> {
-        let r = self.table.lock().await.try_insert(peer_id);
+        match self.table.lock().await.try_insert(peer_id) {
+            Some(pop) => {
+                if pop != peer_id {
+                    self.len.fetch_sub(1, Ordering::Relaxed);
+                }
 
-        if r.is_none() {
-            self.len.fetch_add(1, Ordering::Relaxed);
-        } else {
-            self.len.fetch_sub(1, Ordering::Relaxed);
+                Some(pop)
+            }
+            None => {
+                self.len.fetch_add(1, Ordering::Relaxed);
+                None
+            }
         }
-
-        r
     }
 }
 
@@ -349,15 +350,12 @@ impl<const K: usize> KBucketTable<K> {
 #[cfg(test)]
 mod tests {
 
-    use std::sync::atomic::AtomicBool;
+    use std::sync::Once;
 
     use super::{uint::U256, *};
 
     use quickcheck::*;
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
-    use xstack::global_switch;
-    use xstack_dnsaddr::DnsAddr;
-    use xstack_quic::QuicTransport;
     use xstack_tcp::TcpTransport;
 
     impl Arbitrary for KBucketKey {
@@ -372,6 +370,17 @@ mod tests {
             a.distance(&b) == b.distance(&a)
         }
         quickcheck(prop as fn(_, _) -> _)
+    }
+
+    #[test]
+    fn test_generic_array() {
+        let mut array = GenericArray::<Option<usize>, generic_array::typenum::U256>::default();
+
+        assert_eq!(array[254], None);
+
+        array[254] = Some(1);
+
+        assert_eq!(array[254], Some(1));
     }
 
     #[test]
@@ -395,38 +404,28 @@ mod tests {
         assert_eq!(distance.0, U256::from(0));
     }
 
-    async fn init() {
-        static INIT: AtomicBool = AtomicBool::new(false);
+    async fn init() -> Switch {
+        static INIT: Once = Once::new();
 
-        if INIT
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
-            .is_ok()
-        {
-            // _ = pretty_env_logger::try_init_timed();
+        INIT.call_once(|| {
+            _ = pretty_env_logger::try_init_timed();
 
             register_mio_network();
             register_mio_timer();
+        });
 
-            Switch::new("kad-test")
-                .transport(QuicTransport::default())
-                .transport(TcpTransport::default())
-                .transport(DnsAddr::new().await.unwrap())
-                .create()
-                .await
-                .unwrap()
-                .into_global();
-
-            INIT.store(false, Ordering::Release);
-        }
-
-        while INIT.load(Ordering::Acquire) {}
+        Switch::new("kad-test")
+            .transport(TcpTransport::default())
+            .create()
+            .await
+            .unwrap()
     }
 
     #[futures_test::test]
     async fn test_table() {
-        init().await;
+        let switch = init().await;
 
-        let k_bucket_table = KBucketTable::<20>::bind(global_switch()).await;
+        let k_bucket_table = KBucketTable::<20>::bind(&switch).await;
 
         k_bucket_table.insert(PeerId::random()).await;
 

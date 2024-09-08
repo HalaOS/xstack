@@ -58,6 +58,8 @@ async fn find_node() {
     AutoNatClient::bind_with(&switch);
 
     loop {
+        // let peer_id = switch.local_id();
+
         let peer_id = PeerId::random();
 
         let peer_info = kad.find_node(&peer_id).await.unwrap();
