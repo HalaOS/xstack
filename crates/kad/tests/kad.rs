@@ -39,7 +39,7 @@ async fn find_node() {
     // use hala_pprof_memory::PprofAlloc;
 
     // #[global_allocator]
-    // static ALLOC: PprofAlloc = PprofAlloc;
+    // static ALLOC: PprofAlloc = PprofAlloc(20);
 
     let switch = init().await;
 
