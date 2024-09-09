@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
+use futures::lock::Mutex;
 use multiaddr::Multiaddr;
 
 use crate::{
@@ -13,10 +14,12 @@ use crate::{
     SyncEventMediator,
 };
 
-use super::Switch;
+use super::{mutable::MutableSwitch, Switch};
 
 /// The configuration of `Switch`.
 pub struct SwitchOptions {
+    /// The maximum length of observed addresses buffer.
+    pub max_observed_addrs_len: usize,
     /// The maximum number of concurrent connection tasks launched to a peer.
     pub connect_replication: usize,
     /// The value of rpc timeout.
@@ -43,6 +46,7 @@ pub struct SwitchOptions {
 impl SwitchOptions {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
+            max_observed_addrs_len: 5,
             connect_replication: 1,
             agent_version,
             timeout: Duration::from_secs(5),
@@ -151,6 +155,15 @@ impl SwitchBuilder {
         })
     }
 
+    /// Set the maximum length of observed addresses buffer.
+    pub fn max_observed_addrs_len(self, value: usize) -> Self {
+        self.and_then(|mut cfg| {
+            cfg.immutable.max_observed_addrs_len = value;
+
+            Ok(cfg)
+        })
+    }
+
     /// Set the maximum length of incoming rpc packets. the default value is `1024 * 1024 * 4`
     pub fn max_packet_size(self, value: usize) -> Self {
         self.and_then(|mut cfg| {
@@ -211,7 +224,9 @@ impl SwitchBuilder {
         let switch = Switch {
             local_peer_id: Arc::new(public_key.to_peer_id()),
             public_key: Arc::new(public_key),
-            mutable: Default::default(),
+            mutable: Arc::new(Mutex::new(MutableSwitch::new(
+                ops.immutable.max_observed_addrs_len,
+            ))),
             ops: Arc::new(ops.immutable),
         };
 
