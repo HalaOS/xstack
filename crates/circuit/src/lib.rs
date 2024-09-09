@@ -15,6 +15,9 @@ pub use transport::*;
 mod errors;
 pub use errors::*;
 
+mod protocols;
+pub use protocols::*;
+
 /// Protocol id for `stop protocol`.
 pub const PROTOCOL_CIRCUIT_RELAY_STOP: &str = "/libp2p/circuit/relay/0.2.0/stop";
 

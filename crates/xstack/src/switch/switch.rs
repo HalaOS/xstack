@@ -45,42 +45,6 @@ impl Deref for Switch {
 }
 
 impl Switch {
-    async fn handle_incoming(&self, listener: TransportListener) -> Result<()> {
-        let mut incoming = listener.into_incoming();
-
-        while let Some(mut conn) = incoming.try_next().await? {
-            log::trace!(
-                "accept a new incoming connection, peer={}, local={}",
-                conn.peer_addr(),
-                conn.local_addr()
-            );
-
-            let this = self.clone();
-
-            spawn_ok(async move {
-                if let Err(err) = this.handshake(&mut conn).await {
-                    log::error!(
-                        "setup connection, peer={}, local={}, err={}",
-                        conn.peer_addr(),
-                        conn.local_addr(),
-                        err
-                    );
-                    _ = conn.close();
-                } else {
-                    log::trace!(
-                        "setup connection, peer={}, local={}",
-                        conn.peer_addr(),
-                        conn.local_addr()
-                    );
-
-                    this.connector.authenticated(conn, true).await;
-                }
-            })
-        }
-
-        Ok(())
-    }
-
     /// Start a background task to accept inbound stream, and make a identity request to authenticate peer.
     async fn handshake(&self, conn: &mut P2pConn) -> Result<()> {
         self.ops.stream_dispatcher.handshake(conn.id()).await;
@@ -315,15 +279,41 @@ impl Switch {
 
         self.mutable.lock().await.transport_bind_to(laddr.clone());
 
-        let this = self.clone();
+        self.transport_bind_with(listener).await
+    }
 
-        spawn_ok(async move {
-            if let Err(err) = this.handle_incoming(listener).await {
-                log::error!(target:"switch" ,"listener({}) stop, err={}",laddr, err);
-            } else {
-                log::info!(target:"switch" ,"listener({}) stop",laddr);
-            }
-        });
+    async fn handle_incoming(&self, listener: TransportListener) -> Result<()> {
+        let mut incoming = listener.into_incoming();
+
+        while let Some(mut conn) = incoming.try_next().await? {
+            log::trace!(
+                "accept a new incoming connection, peer={}, local={}",
+                conn.peer_addr(),
+                conn.local_addr()
+            );
+
+            let this = self.clone();
+
+            spawn_ok(async move {
+                if let Err(err) = this.handshake(&mut conn).await {
+                    log::error!(
+                        "setup connection, peer={}, local={}, err={}",
+                        conn.peer_addr(),
+                        conn.local_addr(),
+                        err
+                    );
+                    _ = conn.close();
+                } else {
+                    log::trace!(
+                        "setup connection, peer={}, local={}",
+                        conn.peer_addr(),
+                        conn.local_addr()
+                    );
+
+                    this.connector.authenticated(conn, true).await;
+                }
+            })
+        }
 
         Ok(())
     }
@@ -358,6 +348,23 @@ impl Switch {
         }
 
         self.transport_connect_prv(raddr).await
+    }
+
+    /// Dynamically bind a transport listener to this switch.
+    pub async fn transport_bind_with(&self, listener: TransportListener) -> Result<()> {
+        let this = self.clone();
+
+        let laddr = listener.local_addr()?;
+
+        spawn_ok(async move {
+            if let Err(err) = this.handle_incoming(listener).await {
+                log::error!("listener({}) stop, err={}", laddr, err);
+            } else {
+                log::info!("listener({}) stop", laddr);
+            }
+        });
+
+        Ok(())
     }
 
     /// Create a protocol layer server-side socket, that accept inbound [`ProtocolStream`].

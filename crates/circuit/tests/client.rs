@@ -9,7 +9,7 @@ use xstack::{
     Switch, PROTOCOL_IPFS_PING,
 };
 use xstack_autonat::AutoNatClient;
-use xstack_circuit::CircuitTransport;
+use xstack_circuit::{CircuitStopServer, CircuitTransport};
 use xstack_dnsaddr::DnsAddr;
 use xstack_kad::KademliaRouter;
 use xstack_quic::QuicTransport;
@@ -30,7 +30,6 @@ async fn init() -> Switch {
         .transport(TcpTransport::default())
         .transport(DnsAddr::new().await.unwrap())
         .transport(CircuitTransport::default())
-        .transport_bind(["/p2p-circuit"])
         .create()
         .await
         .unwrap()
@@ -115,4 +114,54 @@ async fn client_connect() {
         peer_id,
         now.elapsed()
     );
+}
+
+#[futures_test::test]
+async fn stop_server() {
+    let switch = init().await;
+
+    let kad = KademliaRouter::with(&switch)
+            .with_seeds([
+                "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+		        "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+		        "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+            ])
+            .await
+            .unwrap();
+
+    AutoNatClient::bind_with(&switch);
+
+    CircuitStopServer::bind_with(&switch, 100);
+
+    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
+        .parse()
+        .unwrap();
+
+    let now = Instant::now();
+
+    let peer_info = kad.find_node(&peer_id).await.unwrap().expect("found peer");
+
+    log::trace!(
+        "kad search peer_d={}, times={:?} success",
+        peer_id,
+        now.elapsed(),
+    );
+
+    let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
+
+    let _addrs = peer_info
+        .addrs
+        .iter()
+        .flat_map(|addr| {
+            if addr.ends_with(&circuit_suffix) {
+                Some(addr.clone().with_p2p(peer_id))
+            } else {
+                None
+            }
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
 }
