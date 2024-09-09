@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
+use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::driver_wrapper;
 /// A `PeerInfo` combines a Peer ID with a set of multiaddrs that the peer is listening on.
@@ -123,6 +124,9 @@ pub mod peerbook_syscall {
         async fn listen_on(&self, raddr: &Multiaddr) -> Result<Option<PeerId>>;
         /// Returns the peer book size.
         async fn len(&self) -> usize;
+
+        /// Randomly select peers by protoco_id.
+        async fn choose_peers(&self, protocol_id: &str, limits: usize) -> Result<Vec<PeerId>>;
     }
 }
 
@@ -219,5 +223,24 @@ impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
             .peer_addrs
             .get(raddr)
             .map(|id| id.clone()))
+    }
+
+    async fn choose_peers(&self, protocol_id: &str, maximun: usize) -> Result<Vec<PeerId>> {
+        let protocol_id = protocol_id.to_owned();
+
+        Ok(self
+            .0
+            .lock()
+            .await
+            .peer_infos
+            .iter()
+            .filter_map(|(_, info)| {
+                if info.protos.contains(&protocol_id) {
+                    Some(info.id)
+                } else {
+                    None
+                }
+            })
+            .choose_multiple(&mut thread_rng(), maximun))
     }
 }

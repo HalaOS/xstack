@@ -2,20 +2,23 @@ use std::{
     io::{Error, ErrorKind, Result},
     num::NonZeroUsize,
     sync::{atomic::AtomicUsize, Arc},
+    time::{Duration, SystemTime},
 };
 
 use async_trait::async_trait;
 
 use futures::{
     channel::mpsc::{channel, Receiver, Sender},
+    stream::FuturesUnordered,
     SinkExt, StreamExt, TryStreamExt,
 };
-use rasi::task::spawn_ok;
+use rasi::{task::spawn_ok, timer::sleep};
 use xstack::{
     events,
     multiaddr::{Multiaddr, Protocol},
     transport_syscall::DriverListener,
-    AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolStream, Switch,
+    AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolStream, Switch, XStackRpc,
+    PROTOCOL_IPFS_PING,
 };
 use xstack_tls::{create_ssl_acceptor, SslAcceptor, TlsConn};
 
@@ -42,52 +45,85 @@ impl DriverListener for CircuitStopListener {
 /// A [`stop`] protocol server side implementation.
 ///
 /// [`stop`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#stop-protocol
+#[derive(Clone)]
 pub struct CircuitStopServer {
     activities: Arc<AtomicUsize>,
     incoming_buffer: usize,
+    channel_limits: usize,
+    ping_duration: Duration,
     switch: Switch,
 }
 
 impl CircuitStopServer {
+    /// Bind `CircuitStopServer` to the global context `Switch`.
+    #[cfg(feature = "global_register")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "global_register")))]
+    pub fn new() -> Self {
+        use xstack::global_switch;
+
+        Self::bind_with(global_switch())
+    }
+
     /// Bind `CircuitStopServer` to a `Switch`.
-    ///
-    /// # Parameters
-    ///
-    /// - `incoming_buffer` the incoming connecton queue maximun buffer size.
-    pub fn bind_with(switch: &Switch, incoming_buffer: usize) {
-        let server = CircuitStopServer {
+    pub fn bind_with(switch: &Switch) -> Self {
+        CircuitStopServer {
             switch: switch.clone(),
-            incoming_buffer,
+            incoming_buffer: 100,
             activities: Default::default(),
-        };
-
-        spawn_ok(server.listen_on_nat_changed());
+            channel_limits: 5,
+            ping_duration: Duration::from_secs(60),
+        }
     }
 
-    async fn listen_on_nat_changed(self) {
-        let mut event_source = EventSource::<events::Network>::bind_with(
-            &self.switch,
-            NonZeroUsize::new(100).unwrap(),
-        )
-        .await;
+    /// Override default `incoming_buffer` configuration, the default value is `100`.
+    ///
+    /// This value limits the maximum length of incoming stream queue.
+    pub fn incoming_buffer(mut self, value: usize) -> Self {
+        self.incoming_buffer = value;
+        self
+    }
 
-        loop {
-            if self.switch.nat().await != AutoNAT::Unknown {
-                break;
+    /// Override default `channel_limits` configuration, the default value is `5`.
+    ///
+    /// This value limits the maximun number of [`reservation`] channels.
+    ///
+    ///
+    /// [`reservation`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#reservation
+    pub fn channel_limits(mut self, value: NonZeroUsize) -> Self {
+        self.channel_limits = value.into();
+        self
+    }
+
+    /// Consume `CircuitStopServer` configuration and start the server.
+    pub fn start(self) {
+        spawn_ok(self.clone().run_stop_accept());
+
+        spawn_ok(async move {
+            let mut event_source = EventSource::<events::Network>::bind_with(
+                &self.switch,
+                NonZeroUsize::new(100).unwrap(),
+            )
+            .await;
+
+            loop {
+                // check autonat status.
+                loop {
+                    if self.switch.nat().await == AutoNAT::NAT {
+                        break;
+                    }
+
+                    if event_source.next().await.is_none() {
+                        log::trace!("switch closed.");
+                        return;
+                    };
+                }
+
+                self.run_reservation_client().await;
             }
-
-            if event_source.next().await.is_none() {
-                log::trace!("switch closed.");
-                return;
-            };
-        }
-
-        if self.switch.nat().await == AutoNAT::NAT {
-            self.run_server().await;
-        }
+        });
     }
 
-    async fn run_server(self) {
+    async fn run_stop_accept(self) {
         let ssl_acceptor = match create_ssl_acceptor(&self.switch).await {
             Ok(ssl_acceptor) => ssl_acceptor,
             Err(err) => {
@@ -121,19 +157,76 @@ impl CircuitStopServer {
             }
         };
 
-        spawn_ok(Self::protocol_incoming_loop(
+        Self::protocol_incoming_loop(
             ssl_acceptor,
             sender,
             listener,
             self.activities.clone(),
-        ));
+            self.switch.max_packet_size,
+        )
+        .await;
+    }
 
-        if let Err(err) = self.run_reservation_client().await {
-            log::error!("hop reservation client stopped, {}", err);
+    async fn run_reservation_client(&self) {
+        let mut unordered = FuturesUnordered::new();
+
+        for _ in 0..self.channel_limits {
+            unordered.push(self.clone().reservation_client_loop());
+        }
+
+        while let Some(_) = unordered.next().await {
+            if self.switch.nat().await == AutoNAT::NAT {
+                while unordered.len() < self.channel_limits {
+                    unordered.push(self.clone().reservation_client_loop());
+                }
+            }
         }
     }
 
-    async fn run_reservation_client(self) -> Result<()> {
+    async fn reservation_client_loop(self) {
+        if let Err(err) = self.reservation_client_loop_prv().await {
+            log::error!("reservation_client_loop, stopped with error: {}", err);
+        }
+    }
+
+    async fn reservation_client_loop_prv(self) -> Result<()> {
+        let peers = self
+            .switch
+            .choose_peers(PROTOCOL_CIRCUIT_RELAY_HOP, 1)
+            .await?;
+
+        if peers.is_empty() {
+            // retry after 10s.
+            sleep(Duration::from_secs(10)).await;
+            return Ok(());
+        }
+
+        let peer_id = peers[0];
+
+        let (stream, _) = self
+            .switch
+            .connect(&peer_id, [PROTOCOL_CIRCUIT_RELAY_HOP])
+            .await?;
+
+        let reservation = stream
+            .circuit_v2_hop_reserve(self.switch.max_packet_size)
+            .await?;
+
+        let (mut stream, _) = self.switch.connect(&peer_id, [PROTOCOL_IPFS_PING]).await?;
+
+        while SystemTime::now() < reservation.expire {
+            XStackRpc::xstack_ping(&mut stream).await?;
+
+            // break the ping loop, when switch network was changed.
+            if self.switch.nat().await != AutoNAT::NAT {
+                return Ok(());
+            }
+
+            sleep(self.ping_duration).await;
+        }
+
+        // reservation timeout approaching.
+
         Ok(())
     }
 
@@ -142,9 +235,16 @@ impl CircuitStopServer {
         sender: Sender<P2pConn>,
         listener: ProtocolListener,
         activities: Arc<AtomicUsize>,
+        max_packet_size: usize,
     ) {
-        if let Err(err) =
-            Self::circuit_stop_server_loop_prv(ssl_acceptor, sender, listener, activities).await
+        if let Err(err) = Self::circuit_stop_server_loop_prv(
+            ssl_acceptor,
+            sender,
+            listener,
+            activities,
+            max_packet_size,
+        )
+        .await
         {
             log::error!("circuit_stop_server_loop, stopped with error {}", err)
         } else {
@@ -157,6 +257,7 @@ impl CircuitStopServer {
         sender: Sender<P2pConn>,
         listener: ProtocolListener,
         activities: Arc<AtomicUsize>,
+        max_packet_size: usize,
     ) -> Result<()> {
         let mut incoming = listener.into_incoming();
 
@@ -166,8 +267,14 @@ impl CircuitStopServer {
             let activities = activities.clone();
             spawn_ok(async move {
                 let peer_id = stream.public_key().to_peer_id();
-                if let Err(err) =
-                    Self::handle_stop_incoming(ssl_acceptor, stream, sender, activities).await
+                if let Err(err) = Self::handle_stop_incoming(
+                    ssl_acceptor,
+                    stream,
+                    sender,
+                    activities,
+                    max_packet_size,
+                )
+                .await
                 {
                     log::error!(
                         "handle incoming({}) stop stream with error: {}",
@@ -185,8 +292,9 @@ impl CircuitStopServer {
         mut stream: ProtocolStream,
         mut sender: Sender<P2pConn>,
         activities: Arc<AtomicUsize>,
+        max_packet_size: usize,
     ) -> Result<()> {
-        CircuitV2Rpc::circuit_v2_stop_connect_accept(&mut stream, 1024).await?;
+        CircuitV2Rpc::circuit_v2_stop_connect_accept(&mut stream, max_packet_size).await?;
 
         let local_addr = stream.local_addr().clone();
         let peer_addr = stream.peer_addr().clone();

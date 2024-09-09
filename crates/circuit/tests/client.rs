@@ -134,7 +134,7 @@ async fn stop_server() {
 
     AutoNatClient::bind_with(&switch);
 
-    CircuitStopServer::bind_with(&switch, 100);
+    CircuitStopServer::bind_with(&switch).start();
 
     let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
         .parse()

@@ -433,6 +433,19 @@ impl Switch {
         Ok(self.ops.peer_book.get(peer_id).await?)
     }
 
+    /// Random select peers by protoco_id.
+    pub async fn choose_peers<P: AsRef<str>>(
+        &self,
+        protocol_id: P,
+        limits: usize,
+    ) -> Result<Vec<PeerId>> {
+        Ok(self
+            .ops
+            .peer_book
+            .choose_peers(protocol_id.as_ref(), limits)
+            .await?)
+    }
+
     /// Reverse lookup [`PeerId`] for the peer indicated by the listening address.
     pub async fn lookup_peer_id(&self, raddr: &Multiaddr) -> Result<Option<PeerId>> {
         Ok(self.ops.peer_book.listen_on(raddr).await?)

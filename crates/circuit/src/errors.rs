@@ -29,6 +29,9 @@ pub enum Error {
 
     #[error("Invalid multiaddr for circuit connect function")]
     ConnectAddr,
+
+    #[error("The expire field is null in response packet of hop protocol.")]
+    ReservationExpire,
 }
 
 /// The result type of this crate.

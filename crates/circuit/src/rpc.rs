@@ -17,7 +17,7 @@ use xstack::{identity::PeerId, multiaddr::Multiaddr, XStackRpc};
 #[derive(Debug, Clone)]
 pub struct Reservation {
     /// expiration time of the voucher
-    pub expire: Option<SystemTime>,
+    pub expire: SystemTime,
     /// the public relay addrs, including the peer ID of the relay node but not the trailing p2p-circuit part;
     pub addrs: Vec<Multiaddr>,
     /// When omitted, it indicates that the relay does not apply any limits.
@@ -55,7 +55,7 @@ impl From<Limit> for circuit::Limit {
 /// An extension trait for circuit v2 protocol.
 pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
     /// make a reservation to relayer via this stream.
-    fn circuit_v2_hop_reserve<M>(
+    fn circuit_v2_hop_reserve(
         self,
         max_recv_len: usize,
     ) -> impl Future<Output = Result<Reservation>>
@@ -88,7 +88,8 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
                 return Ok(Reservation {
                     expire: reservation
                         .expire
-                        .map(|value| SystemTime::UNIX_EPOCH + Duration::from_secs(value)),
+                        .map(|value| SystemTime::UNIX_EPOCH + Duration::from_secs(value))
+                        .ok_or(Error::ReservationExpire)?,
                     addrs: reservation
                         .addrs
                         .into_iter()
