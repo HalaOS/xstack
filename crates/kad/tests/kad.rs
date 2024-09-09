@@ -35,7 +35,7 @@ async fn init() -> Switch {
 
 #[futures_test::test]
 async fn find_node() {
-    // use hala_pprof_memory::report::snapshot;
+    // use hala_pprof_memory::snapshot;
     // use hala_pprof_memory::PprofAlloc;
 
     // #[global_allocator]
@@ -87,9 +87,12 @@ async fn find_node() {
             );
         }
 
+        log::info!("observed addrs: {:?}", switch.observed_addrs().await);
+
         log::info!(
-            "{} kad({}), autonat({:?}), connector({}), {}",
+            "{} switch({}) kad({}), autonat({:?}), connector({}), {}",
             i,
+            switch.peer_book.len().await,
             kad.len(),
             switch.nat().await,
             switch.connector.cached().await,

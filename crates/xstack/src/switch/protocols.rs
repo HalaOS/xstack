@@ -35,25 +35,9 @@ impl Switch {
     /// Handle `/ipfs/ping/1.0.0` request.
     pub(super) async fn ping_echo(&self, mut stream: ProtocolStream) -> Result<()> {
         loop {
-            log::trace!("recv /ipfs/ping/1.0.0");
-
-            let body_len = unsigned_varint::aio::read_usize(&mut stream).await?;
-
-            log::trace!("recv /ipfs/ping/1.0.0 payload len {}", body_len);
-
-            if body_len != 32 {
-                return Err(Error::InvalidPingLength(body_len));
-            }
-
-            let mut buf = vec![0; 31];
+            let mut buf = vec![0; 32];
 
             stream.read_exact(&mut buf).await?;
-
-            let mut payload_len = unsigned_varint::encode::usize_buffer();
-
-            stream
-                .write_all(unsigned_varint::encode::usize(buf.len(), &mut payload_len))
-                .await?;
 
             stream.write_all(&buf).await?;
 
@@ -94,10 +78,11 @@ impl Switch {
             .map(|buf| Multiaddr::try_from(buf).map_err(Into::into))
             .collect::<Result<Vec<_>>>()?;
 
-        //TODO: add nat codes
         log::info!("{} observed addrs: {:?}", peer_id, observed_addrs);
 
         log::info!("{} protos: {:?}", peer_id, identity.protocols);
+
+        self.set_observed_addrs(observed_addrs).await;
 
         let peer_info = PeerInfo {
             id: peer_id,

@@ -4,8 +4,7 @@ use std::{fmt::Debug, sync::Arc};
 use super::SwitchBuilder;
 use super::{builder::SwitchOptions, PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING};
 use super::{mutable::MutableSwitch, PROTOCOL_IPFS_PUSH_ID};
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+
 use futures::{lock::Mutex, TryStreamExt};
 use libp2p_identity::{PeerId, PublicKey};
 use multiaddr::Multiaddr;
@@ -121,11 +120,15 @@ impl Switch {
         loop {
             let stream = conn.accept().await?;
 
-            let id = stream.id().to_owned();
+            let this = self.clone();
 
-            if let Err(err) = self.handle_incoming_stream(stream).await {
-                log::trace!("dispatch stream, id={}, err={}", id, err);
-            }
+            spawn_ok(async move {
+                let id = stream.id().to_owned();
+
+                if let Err(err) = this.handle_incoming_stream(stream).await {
+                    log::trace!("dispatch stream, id={}, err={}", id, err);
+                }
+            })
         }
     }
 
@@ -154,28 +157,26 @@ impl Switch {
         let this = self.clone();
         let protoco_id = protoco_id.clone();
 
-        spawn_ok(async move {
-            let peer_addr = stream.peer_addr().clone();
-            let local_addr = stream.local_addr().clone();
-            let id = stream.id().to_owned();
+        let peer_addr = stream.peer_addr().clone();
+        let local_addr = stream.local_addr().clone();
+        let id = stream.id().to_owned();
 
-            if let Err(err) = this.dispatch_stream(protoco_id, stream).await {
-                log::error!(
-                    "dispatch stream, id={}, peer={}, local={}, err={}",
-                    id,
-                    peer_addr,
-                    local_addr,
-                    err
-                );
-            } else {
-                log::trace!(
-                    "dispatch stream ok, id={}, peer={}, local={}",
-                    id,
-                    peer_addr,
-                    local_addr
-                );
-            }
-        });
+        if let Err(err) = this.dispatch_stream(protoco_id, stream).await {
+            log::error!(
+                "dispatch stream, id={}, peer={}, local={}, err={}",
+                id,
+                peer_addr,
+                local_addr,
+                err
+            );
+        } else {
+            log::trace!(
+                "dispatch stream ok, id={}, peer={}, local={}",
+                id,
+                peer_addr,
+                local_addr
+            );
+        }
 
         Ok(())
     }
@@ -264,29 +265,36 @@ impl Switch {
     async fn transport_connect_raddrs(&self, mut raddrs: Vec<Multiaddr>) -> Result<P2pConn> {
         raddrs.shuffle(&mut thread_rng());
 
-        let mut stream = futures::stream::iter(raddrs)
-            .map(|raddr| (self.clone(), raddr))
-            .chunks(self.connect_replication)
-            .flat_map(|raddrs| {
-                let unordered = FuturesUnordered::new();
+        // let mut stream = futures::stream::iter(raddrs)
+        //     .map(|raddr| (self.clone(), raddr))
+        //     .chunks(self.connect_replication)
+        //     .flat_map(|raddrs| {
+        //         let unordered = FuturesUnordered::new();
 
-                // let unordered = FuturesUnordered::new();
+        //         // let unordered = FuturesUnordered::new();
 
-                for (switch, raddr) in raddrs {
-                    unordered.push(async move { switch.transport_connect_prv(&raddr).await });
-                }
+        //         for (switch, raddr) in raddrs {
+        //             unordered.push(async move { switch.transport_connect_prv(&raddr).await });
+        //         }
 
-                unordered
-            });
+        //         unordered
+        //     });
 
         let mut last_error = None;
 
-        while let Some(r) = stream.next().await {
-            match r {
+        // while let Some(r) = stream.next().await {
+        //     match r {
+        //         Ok(conn) => return Ok(conn),
+        //         Err(err) => {
+        //             last_error = Some(err);
+        //         }
+        //     }
+        // }
+
+        for raddr in raddrs {
+            match self.transport_connect_prv(&raddr).await {
                 Ok(conn) => return Ok(conn),
-                Err(err) => {
-                    last_error = Some(err);
-                }
+                Err(err) => last_error = Some(err),
             }
         }
 
@@ -436,6 +444,16 @@ impl Switch {
     /// Returns the addresses list of this switch is bound to.
     pub async fn local_addrs(&self) -> Vec<Multiaddr> {
         self.mutable.lock().await.local_addrs()
+    }
+
+    /// Returns the addresses list of this switch observed by peers.
+    pub async fn observed_addrs(&self) -> Vec<Multiaddr> {
+        self.mutable.lock().await.observed_addrs()
+    }
+
+    ///  Insert observed addresses list.
+    pub async fn set_observed_addrs(&self, addrs: Vec<Multiaddr>) {
+        self.mutable.lock().await.set_observed_addrs(addrs)
     }
 
     /// Returns the addresses list of this switch is listen to.

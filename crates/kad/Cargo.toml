@@ -31,8 +31,8 @@ xstack-quic = { workspace = true }
 xstack-dnsaddr = { workspace = true }
 xstack-autonat = { workspace = true }
 xstack = { workspace = true, features = ["global_register"] }
+hala-pprof-memory = { workspace = true }
 
-# hala-pprof-memory = { workspace = true }
 [build-dependencies]
 protobuf-codegen = { workspace = true }
 protoc-bin-vendored = { workspace = true }

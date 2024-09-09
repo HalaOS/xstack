@@ -121,6 +121,8 @@ pub mod peerbook_syscall {
 
         /// Reverse lookup [`PeerId`] by [`raddr`](Multiaddr)
         async fn listen_on(&self, raddr: &Multiaddr) -> Result<Option<PeerId>>;
+        /// Returns the peer book size.
+        async fn len(&self) -> usize;
     }
 }
 
@@ -141,6 +143,9 @@ pub struct MemoryPeerBook(Mutex<RawMemoryPeerBook>);
 
 #[async_trait]
 impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
+    async fn len(&self) -> usize {
+        self.0.lock().await.peer_infos.len()
+    }
     async fn insert(&self, mut info: PeerInfo) -> Result<Option<PeerInfo>> {
         log::trace!("MemoryPeerBook, put id={}", info.id);
 
