@@ -206,6 +206,7 @@ impl AutoNatClient {
         let (before, current) = self.raw.lock().await.success(addr);
 
         if before != current {
+            log::trace!("network changed: {:?}", current);
             self.switch.set_nat(current).await;
         }
     }
@@ -214,6 +215,7 @@ impl AutoNatClient {
         let (before, current) = self.raw.lock().await.failed();
 
         if before != current {
+            log::trace!("network changed: {:?}", current);
             self.switch.set_nat(current).await;
         }
     }

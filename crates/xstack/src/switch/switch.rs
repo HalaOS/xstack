@@ -498,7 +498,10 @@ impl Switch {
 
     /// Set the the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
     pub async fn set_nat(&self, state: AutoNAT) {
-        self.mutable.lock().await.set_nat(state)
+        self.mutable.lock().await.set_nat(state);
+        self.event_mediator
+            .raise(crate::Event::Network(state))
+            .await;
     }
 
     /// Register self into global context.

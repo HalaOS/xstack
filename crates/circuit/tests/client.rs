@@ -1,7 +1,11 @@
-use std::{sync::Once, time::Instant};
+use std::{
+    sync::Once,
+    time::{Duration, Instant},
+};
 
 use futures::{AsyncReadExt, AsyncWriteExt};
 use rand::{thread_rng, RngCore};
+use rasi::timer::sleep;
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 
 use xstack::{
@@ -134,7 +138,7 @@ async fn stop_server() {
 
     AutoNatClient::bind_with(&switch);
 
-    CircuitStopServer::bind_with(&switch).start();
+    let stop_server = CircuitStopServer::bind_with(&switch).start();
 
     let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
         .parse()
@@ -164,4 +168,9 @@ async fn stop_server() {
         })
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
+
+    while stop_server.reservations() < 3 {
+        log::trace!("waiting reserve calls... {}", stop_server.reservations());
+        sleep(Duration::from_secs(4)).await;
+    }
 }

@@ -1,7 +1,10 @@
 use std::{
     io::{Error, ErrorKind, Result},
     num::NonZeroUsize,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{Duration, SystemTime},
 };
 
@@ -42,11 +45,10 @@ impl DriverListener for CircuitStopListener {
     }
 }
 
-/// A [`stop`] protocol server side implementation.
-///
-/// [`stop`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#stop-protocol
+/// A builder for [`CircuitStopServer`]
 #[derive(Clone)]
-pub struct CircuitStopServer {
+pub struct CircuitStopServerBuilder {
+    reservations: Arc<AtomicUsize>,
     activities: Arc<AtomicUsize>,
     incoming_buffer: usize,
     channel_limits: usize,
@@ -54,27 +56,7 @@ pub struct CircuitStopServer {
     switch: Switch,
 }
 
-impl CircuitStopServer {
-    /// Bind `CircuitStopServer` to the global context `Switch`.
-    #[cfg(feature = "global_register")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "global_register")))]
-    pub fn new() -> Self {
-        use xstack::global_switch;
-
-        Self::bind_with(global_switch())
-    }
-
-    /// Bind `CircuitStopServer` to a `Switch`.
-    pub fn bind_with(switch: &Switch) -> Self {
-        CircuitStopServer {
-            switch: switch.clone(),
-            incoming_buffer: 100,
-            activities: Default::default(),
-            channel_limits: 5,
-            ping_duration: Duration::from_secs(60),
-        }
-    }
-
+impl CircuitStopServerBuilder {
     /// Override default `incoming_buffer` configuration, the default value is `100`.
     ///
     /// This value limits the maximum length of incoming stream queue.
@@ -95,34 +77,44 @@ impl CircuitStopServer {
     }
 
     /// Consume `CircuitStopServer` configuration and start the server.
-    pub fn start(self) {
+    pub fn start(self) -> CircuitStopServer {
         spawn_ok(self.clone().run_stop_accept());
 
-        spawn_ok(async move {
-            let mut event_source = EventSource::<events::Network>::bind_with(
-                &self.switch,
-                NonZeroUsize::new(100).unwrap(),
-            )
-            .await;
+        spawn_ok(self.clone().run_hop_client());
 
-            loop {
-                // check autonat status.
-                loop {
-                    if self.switch.nat().await == AutoNAT::NAT {
-                        break;
-                    }
-
-                    if event_source.next().await.is_none() {
-                        log::trace!("switch closed.");
-                        return;
-                    };
-                }
-
-                self.run_reservation_client().await;
-            }
-        });
+        CircuitStopServer {
+            reservations: self.reservations,
+        }
     }
 
+    async fn run_hop_client(self) {
+        let mut event_source = EventSource::<events::Network>::bind_with(
+            &self.switch,
+            NonZeroUsize::new(100).unwrap(),
+        )
+        .await;
+
+        loop {
+            // check autonat status.
+            loop {
+                let nat = self.switch.nat().await;
+                log::trace!("hop client check network: {:?}", nat);
+
+                if nat == AutoNAT::NAT {
+                    break;
+                }
+
+                if event_source.next().await.is_none() {
+                    log::trace!("switch closed.");
+                    return;
+                };
+            }
+
+            log::trace!("start circuit reservation client.");
+
+            self.run_reservation_client().await;
+        }
+    }
     async fn run_stop_accept(self) {
         let ssl_acceptor = match create_ssl_acceptor(&self.switch).await {
             Ok(ssl_acceptor) => ssl_acceptor,
@@ -196,6 +188,7 @@ impl CircuitStopServer {
             .await?;
 
         if peers.is_empty() {
+            log::trace!("hop client, sleep...");
             // retry after 10s.
             sleep(Duration::from_secs(10)).await;
             return Ok(());
@@ -212,13 +205,25 @@ impl CircuitStopServer {
             .circuit_v2_hop_reserve(self.switch.max_packet_size)
             .await?;
 
-        let (mut stream, _) = self.switch.connect(&peer_id, [PROTOCOL_IPFS_PING]).await?;
+        self.reservations.fetch_add(1, Ordering::Relaxed);
+
+        let mut stream = match self.switch.connect(&peer_id, [PROTOCOL_IPFS_PING]).await {
+            Ok((stream, _)) => stream,
+            Err(err) => {
+                self.reservations.fetch_sub(1, Ordering::Relaxed);
+                return Err(err.into());
+            }
+        };
 
         while SystemTime::now() < reservation.expire {
-            XStackRpc::xstack_ping(&mut stream).await?;
+            if let Err(err) = XStackRpc::xstack_ping(&mut stream).await {
+                self.reservations.fetch_sub(1, Ordering::Relaxed);
+                return Err(err.into());
+            }
 
             // break the ping loop, when switch network was changed.
             if self.switch.nat().await != AutoNAT::NAT {
+                self.reservations.fetch_sub(1, Ordering::Relaxed);
                 return Ok(());
             }
 
@@ -306,5 +311,40 @@ impl CircuitStopServer {
             .send(conn.into())
             .await
             .map_err(|_| Error::new(ErrorKind::BrokenPipe, ""))?)
+    }
+}
+
+/// A [`stop`] protocol server side implementation.
+///
+/// [`stop`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#stop-protocol
+pub struct CircuitStopServer {
+    reservations: Arc<AtomicUsize>,
+}
+
+impl CircuitStopServer {
+    /// Bind `CircuitStopServer` to the global context `Switch`.
+    #[cfg(feature = "global_register")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "global_register")))]
+    pub fn new() -> CircuitStopServerBuilder {
+        use xstack::global_switch;
+
+        Self::bind_with(global_switch())
+    }
+
+    /// Bind `CircuitStopServer` to a `Switch`.
+    pub fn bind_with(switch: &Switch) -> CircuitStopServerBuilder {
+        CircuitStopServerBuilder {
+            reservations: Default::default(),
+            switch: switch.clone(),
+            incoming_buffer: 100,
+            activities: Default::default(),
+            channel_limits: 5,
+            ping_duration: Duration::from_secs(60),
+        }
+    }
+
+    /// Returns the count of valid reservations.
+    pub fn reservations(&self) -> usize {
+        self.reservations.load(Ordering::Relaxed)
     }
 }
