@@ -47,7 +47,7 @@ impl SwitchOptions {
     pub(super) fn new(agent_version: String) -> Self {
         Self {
             max_observed_addrs_len: 5,
-            connect_replication: 1,
+            connect_replication: 3,
             agent_version,
             timeout: Duration::from_secs(5),
             max_packet_size: 1024 * 1024 * 4,

@@ -196,14 +196,15 @@ impl CircuitStopServerBuilder {
 
         let peer_id = peers[0];
 
-        let (stream, _) = self
+        let (mut stream, _) = self
             .switch
             .connect(&peer_id, [PROTOCOL_CIRCUIT_RELAY_HOP])
             .await?;
 
-        let reservation = stream
-            .circuit_v2_hop_reserve(self.switch.max_packet_size)
-            .await?;
+        let reservation =
+            CircuitV2Rpc::circuit_v2_hop_reserve(&mut stream, self.switch.max_packet_size).await?;
+
+        log::info!("reserve from {}, {:?}", stream.peer_addr(), reservation);
 
         self.reservations.fetch_add(1, Ordering::Relaxed);
 

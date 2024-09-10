@@ -169,7 +169,7 @@ async fn stop_server() {
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
-    while stop_server.reservations() < 3 {
+    while stop_server.reservations() < 5 {
         log::trace!("waiting reserve calls... {}", stop_server.reservations());
         sleep(Duration::from_secs(4)).await;
     }
