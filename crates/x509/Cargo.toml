@@ -31,3 +31,4 @@ thiserror = { workspace = true }
 rand = { workspace = true }
 protobuf = { workspace = true }
 xstack = { workspace = true }
+log = { workspace = true }

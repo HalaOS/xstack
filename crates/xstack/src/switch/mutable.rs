@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use multiaddr::Multiaddr;
 
@@ -6,10 +6,10 @@ use crate::AutoNAT;
 
 #[derive(Default)]
 pub(super) struct MutableSwitch {
-    laddrs: Vec<Multiaddr>,
     max_observed_addrs_len: usize,
+    laddrs: Vec<Multiaddr>,
     observed_addrs: VecDeque<Multiaddr>,
-    nat_addrs: Vec<Multiaddr>,
+    nat_addrs: HashSet<Multiaddr>,
     nat: AutoNAT,
 }
 
@@ -33,7 +33,7 @@ impl MutableSwitch {
     pub(super) fn listen_addrs(&self) -> Vec<Multiaddr> {
         match self.nat {
             AutoNAT::Public => self.laddrs.clone(),
-            AutoNAT::NAT => self.nat_addrs.clone(),
+            AutoNAT::NAT => self.nat_addrs.iter().cloned().collect(),
             AutoNAT::Unknown => vec![],
         }
     }
@@ -53,7 +53,13 @@ impl MutableSwitch {
     }
 
     pub(super) fn set_net_addrs(&mut self, addrs: Vec<Multiaddr>) {
-        self.nat_addrs = addrs;
+        self.nat_addrs.extend(addrs.into_iter());
+    }
+
+    pub(super) fn remove_net_addrs(&mut self, addrs: &[Multiaddr]) {
+        for addr in addrs {
+            self.nat_addrs.remove(addr);
+        }
     }
 
     pub(super) fn auto_nat(&self) -> AutoNAT {

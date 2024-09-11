@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     future::Future,
     time::{Duration, SystemTime},
 };
@@ -31,6 +32,12 @@ pub struct Limit {
     pub duration: Option<Duration>,
     /// the maximum number of bytes allowed to be transmitted in each direction; if None there is no limit applied
     pub data: Option<usize>,
+}
+
+impl Display for Limit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "duration={:?}, data={:?}", self.duration, self.data)
+    }
 }
 
 impl From<circuit::Limit> for Limit {

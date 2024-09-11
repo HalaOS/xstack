@@ -3,14 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{AsyncReadExt, AsyncWriteExt};
-use rand::{thread_rng, RngCore};
 use rasi::timer::sleep;
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 
 use xstack::{
+    identity::PeerId,
     multiaddr::{Multiaddr, Protocol},
-    Switch, PROTOCOL_IPFS_PING,
+    Switch, XStackRpc, PROTOCOL_IPFS_PING,
 };
 use xstack_autonat::AutoNatClient;
 use xstack_circuit::{CircuitStopServer, CircuitTransport};
@@ -71,6 +70,8 @@ async fn client_connect() {
         now.elapsed(),
     );
 
+    log::trace!("add circuit addresses={:#?}", peer_info.addrs);
+
     let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
 
     let addrs = peer_info
@@ -90,7 +91,7 @@ async fn client_connect() {
 
     let now = Instant::now();
 
-    let (mut stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
+    let (stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
 
     log::trace!(
         "circuit_v2 connect peer_id={}: times={:?}, raddr={}",
@@ -99,19 +100,7 @@ async fn client_connect() {
         stream.peer_addr(),
     );
 
-    let mut buf = vec![0u8; 32];
-
-    thread_rng().fill_bytes(&mut buf);
-
-    let now = Instant::now();
-
-    stream.write_all(&buf).await.unwrap();
-
-    let mut echo = vec![0u8; 32];
-
-    stream.read_exact(&mut echo).await.unwrap();
-
-    assert_eq!(echo, buf);
+    stream.xstack_ping().await.unwrap();
 
     log::trace!(
         "circuit_v2 ping peer_id={}: times={:?}",
@@ -138,30 +127,32 @@ async fn stop_server() {
 
     AutoNatClient::bind_with(&switch);
 
-    let stop_server = CircuitStopServer::bind_with(&switch).start();
-
-    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
-        .parse()
-        .unwrap();
+    let peer_id = PeerId::random();
 
     let now = Instant::now();
 
-    let peer_info = kad.find_node(&peer_id).await.unwrap().expect("found peer");
+    let _ = kad.find_node(&peer_id).await.unwrap();
 
-    log::trace!(
-        "kad search peer_d={}, times={:?} success",
-        peer_id,
-        now.elapsed(),
-    );
+    log::trace!("kad search peer_d={}, times={:?}", peer_id, now.elapsed(),);
+
+    let stop_server = CircuitStopServer::bind_with(&switch).start();
+
+    while stop_server.reservations() == 0 {
+        log::trace!("waiting reserve calls... {}", stop_server.reservations());
+        sleep(Duration::from_secs(4)).await;
+    }
+
+    sleep(Duration::from_secs(4)).await;
 
     let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
 
-    let _addrs = peer_info
-        .addrs
+    let addrs = switch
+        .listen_addrs()
+        .await
         .iter()
         .flat_map(|addr| {
             if addr.ends_with(&circuit_suffix) {
-                Some(addr.clone().with_p2p(peer_id))
+                Some(addr.clone().with_p2p(switch.local_id().clone()))
             } else {
                 None
             }
@@ -169,8 +160,14 @@ async fn stop_server() {
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
-    while stop_server.reservations() < 5 {
-        log::trace!("waiting reserve calls... {}", stop_server.reservations());
-        sleep(Duration::from_secs(4)).await;
-    }
+    log::info!("listen on: {:#?}", addrs);
+
+    let switch_2 = init().await;
+
+    let (stream, _) = switch_2
+        .connect(addrs.as_slice(), [PROTOCOL_IPFS_PING])
+        .await
+        .unwrap();
+
+    stream.xstack_ping().await.unwrap();
 }

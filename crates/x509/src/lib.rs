@@ -219,8 +219,14 @@ pub async fn generate(keypair: &KeyStore) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>
     let subject = Name::from_der(&subject).unwrap();
     let pub_key = SubjectPublicKeyInfoOwned::from_key(public_key)?;
 
-    let mut builder =
-        CertificateBuilder::new(profile, serial_number, validity, subject, pub_key, &signer)?;
+    let mut builder = CertificateBuilder::new(
+        profile,
+        serial_number.clone(),
+        validity,
+        subject,
+        pub_key,
+        &signer,
+    )?;
 
     let libp2p_extension =
         Libp2pExtension::new(keypair, public_key.to_public_key_der()?.as_bytes()).await?;

@@ -60,7 +60,10 @@ pub async fn create_ssl_acceptor(switch: &Switch) -> Result<SslAcceptor> {
                 .map_err(|_| SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE))?;
 
             let peer_id = xstack_x509::verify(cert)
-                .map_err(|_| SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE))?
+                .map_err(|err| {
+                    log::error!("xstack_x509 verify failed: {}", err);
+                    SslVerifyError::Invalid(SslAlert::CERTIFICATE_UNKNOWN)
+                })?
                 .to_peer_id();
 
             log::trace!("ssl_server: verified peer={}", peer_id);
@@ -74,12 +77,11 @@ pub async fn create_ssl_acceptor(switch: &Switch) -> Result<SslAcceptor> {
 
 /// A listener over tls/yamux.
 pub struct TlsListener<Incoming> {
+    switch: Switch,
     /// the multiaddr to which the listener is bound.
     local_addr: Multiaddr,
     /// underlying listener.
     incoming: Incoming,
-    /// ssl acceptor from boring crate.
-    ssl_acceptor: SslAcceptor,
     /// the counter for actives connections.
     activities: Arc<AtomicUsize>,
 }
@@ -92,11 +94,9 @@ impl<Incoming> TlsListener<Incoming> {
         incoming: Incoming,
         activities: Arc<AtomicUsize>,
     ) -> Result<Self> {
-        let ssl_acceptor = create_ssl_acceptor(switch).await?;
-
         Ok(Self {
+            switch: switch.clone(),
             activities,
-            ssl_acceptor,
             incoming,
             local_addr,
         })
@@ -118,11 +118,13 @@ where
             }
         };
 
+        let ssl_acceptor = create_ssl_acceptor(&self.switch).await?;
+
         Ok(TlsConn::accept(
             stream,
             self.local_addr.clone(),
             raddr,
-            &self.ssl_acceptor,
+            &ssl_acceptor,
             self.activities.clone(),
         )
         .await?

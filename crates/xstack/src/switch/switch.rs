@@ -258,7 +258,10 @@ impl Switch {
         for raddr in raddrs {
             match self.transport_connect_prv(&raddr).await {
                 Ok(conn) => return Ok(conn),
-                Err(err) => last_error = Some(err),
+                Err(err) => {
+                    log::error!("connect to {} with error: {}", raddr, err);
+                    last_error = Some(err);
+                }
             }
         }
 
@@ -483,12 +486,16 @@ impl Switch {
         self.mutable.lock().await.listen_addrs()
     }
 
-    /// Sets the list of listening addresses for the [`circuit-v2/stop`] protocol.
-    /// to change listening addresses to circuit protocol addresses.
+    /// Sets the [`circuit-v2`] listening addresses.
     ///
     /// [`circuit-v2/stop`]: https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md#stop-protocol
     pub async fn set_nat_addrs(&self, addrs: Vec<Multiaddr>) {
         self.mutable.lock().await.set_net_addrs(addrs);
+    }
+
+    /// remove [`circuit-v2`] listening addresses from this `Switch`.
+    pub async fn remove_nat_addrs(&self, addrs: &[Multiaddr]) {
+        self.mutable.lock().await.remove_net_addrs(addrs);
     }
 
     /// Returns the [*autonat protocol*](https://github.com/libp2p/specs/tree/master/autonat) [`state`](AutoNAT).
