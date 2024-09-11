@@ -6,8 +6,8 @@ use std::{
     sync::Arc,
 };
 
-use futures::{channel::mpsc::channel, SinkExt, StreamExt};
-use rasi::{task::spawn_ok, timer::TimeoutExt};
+use futures::{stream::FuturesUnordered, StreamExt};
+use rasi::timer::TimeoutExt;
 use xstack::{global_switch, identity::PeerId, multiaddr::Multiaddr, PeerInfo, Switch};
 
 use crate::{
@@ -85,9 +85,7 @@ impl<'a> Recursively<'a> {
     {
         let concurrency = self.concurrency.into();
 
-        let (sender, mut receiver) = channel(concurrency);
-
-        let mut pending = 0;
+        let mut unorderd = FuturesUnordered::new();
 
         while let Some(peer_id) = self.candidates.pop_front() {
             loop {
@@ -119,13 +117,7 @@ impl<'a> Recursively<'a> {
 
                 let fut = alg.route(&peer_id);
 
-                let mut sender = sender.clone();
-
-                spawn_ok(async move {
-                    _ = sender.send((peer_id, fut.await)).await;
-                });
-
-                pending += 1;
+                unorderd.push(async move { (peer_id, fut.await) });
 
                 break;
             }
@@ -134,14 +126,14 @@ impl<'a> Recursively<'a> {
                 "{}, candidates={} pending={} concurrency={}",
                 self.label.unwrap_or("routing"),
                 self.candidates.len(),
-                pending,
+                unorderd.len(),
                 concurrency
             );
 
-            while (self.candidates.is_empty() && pending > 0) || pending == concurrency {
-                let (peer_id, result) = receiver.next().await.unwrap();
-
-                pending -= 1;
+            while (self.candidates.is_empty() && !unorderd.is_empty())
+                || unorderd.len() == concurrency
+            {
+                let (peer_id, result) = unorderd.next().await.unwrap();
 
                 match result {
                     Ok(Routing::Closest(peers)) => {
