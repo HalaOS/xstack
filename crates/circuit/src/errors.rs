@@ -32,6 +32,12 @@ pub enum Error {
 
     #[error("The expire field is null in response packet of hop protocol.")]
     ReservationExpire,
+
+    #[error("Expect `DCUtR Connect` message")]
+    DCUtRConnect,
+
+    #[error("Expect `DCUtR Sync` message")]
+    DCUtRSync,
 }
 
 /// The result type of this crate.

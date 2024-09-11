@@ -79,22 +79,20 @@ impl AutoNatClient {
     /// Bind a new *autonat* client instance to global context `Switch`.
     #[cfg(feature = "global_register")]
     #[cfg_attr(docsrs, doc(cfg(feature = "global_register")))]
-    pub fn bind() -> Self {
+    pub fn bind() {
         use xstack::global_switch;
 
         Self::bind_with(global_switch())
     }
 
     /// Bind a new *autonat* client instance to `Switch`
-    pub fn bind_with(switch: &Switch) -> Self {
+    pub fn bind_with(switch: &Switch) {
         let client = Self {
             switch: switch.clone(),
             raw: Default::default(),
         };
 
         spawn_ok(client.clone().auto_nat_client());
-
-        client
     }
 
     async fn auto_nat_client(self) {

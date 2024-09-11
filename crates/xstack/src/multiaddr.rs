@@ -37,3 +37,41 @@ impl ToSockAddr for Multiaddr {
         }
     }
 }
+
+/// Returns true if this [`Multiaddr`] is supported by `tcp/tls` transport.
+pub fn is_tcp_transport(addr: &Multiaddr) -> bool {
+    for proto in addr.iter() {
+        if proto == Protocol::P2pCircuit {
+            return false;
+        }
+    }
+
+    let stack = addr.protocol_stack().collect::<Vec<_>>();
+
+    if stack.len() > 1 {
+        if stack[1] == "tcp" {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Returns true if this [`Multiaddr`] is supported by `quic` transport.
+pub fn is_quic_transport(addr: &Multiaddr) -> bool {
+    for proto in addr.iter() {
+        if proto == Protocol::P2pCircuit {
+            return false;
+        }
+    }
+
+    let stack = addr.protocol_stack().collect::<Vec<_>>();
+
+    if stack.len() > 2 {
+        if stack[1] == "udp" && stack[2] == "quic-v1" {
+            return true;
+        }
+    }
+
+    false
+}

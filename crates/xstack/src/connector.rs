@@ -47,7 +47,7 @@ pub mod connector_syscall {
         async fn reuse_connect(&self, raddr: &Multiaddr) -> Option<P2pConn>;
 
         /// Put a connection with a successful handshake back into the connector pool.
-        async fn authenticated(&self, conn: P2pConn, inbound: bool);
+        async fn authenticated(&self, conn: P2pConn, inbound: bool, replace: Option<&str>);
 
         /// Return the connector pool size.
         async fn cached(&self) -> usize;
@@ -96,7 +96,7 @@ impl RawConnPool {
     }
 
     /// add a authenticated connection into the pool.
-    fn add(&mut self, conn: P2pConn, inbound: bool) {
+    fn add(&mut self, conn: P2pConn, inbound: bool, replace: Option<&str>) {
         self.check_limits();
         let peer_id = conn.public_key().to_peer_id();
         let peer_addr = conn.peer_addr().clone();
@@ -113,6 +113,10 @@ impl RawConnPool {
             } else {
                 self.peers.insert(peer_id, vec![id]);
             }
+        }
+
+        if let Some(replace) = replace {
+            self.remove(replace);
         }
     }
 
@@ -242,13 +246,13 @@ impl connector_syscall::DriverConnector for ConnPool {
     }
 
     /// Put a connection with a successful handshake back into the connector pool.
-    async fn authenticated(&self, conn: P2pConn, inbound: bool) {
+    async fn authenticated(&self, conn: P2pConn, inbound: bool, replace: Option<&str>) {
         log::trace!(
             "authenticated, raddr={}, inbound={}",
             conn.peer_addr(),
             inbound
         );
-        self.raw.lock().await.add(conn, inbound);
+        self.raw.lock().await.add(conn, inbound, replace);
     }
 
     async fn cached(&self) -> usize {

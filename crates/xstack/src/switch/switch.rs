@@ -198,7 +198,9 @@ impl Switch {
                     return Err(err);
                 } else {
                     log::trace!("{}, setup success", raddr);
-                    self.connector.authenticated(conn.clone(), false).await;
+                    self.connector
+                        .authenticated(conn.clone(), false, None)
+                        .await;
                     conn
                 }
             }
@@ -265,7 +267,7 @@ impl Switch {
             }
         }
 
-        Err(last_error.unwrap_or(Error::ConnectAddresses))
+        Err(last_error.unwrap_or(Error::EmptyPeerAddrs))
     }
 
     /// Create a new transport layer socket that accepts peer's inbound connections.
@@ -313,7 +315,7 @@ impl Switch {
                         conn.local_addr()
                     );
 
-                    this.connector.authenticated(conn, true).await;
+                    this.connector.authenticated(conn, true, None).await;
                 }
             })
         }
@@ -335,8 +337,6 @@ impl Switch {
     ///
     /// This function first query the route table to get the peer id,
     /// if exists then check for a local connection cache.
-    ///
-    /// if the parameter pin is true, the `Switch` will not drop the created connection when the connection pool is doing garbage collect
     pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<P2pConn> {
         log::trace!("{}, try establish transport connection", raddr);
 
@@ -351,6 +351,44 @@ impl Switch {
         }
 
         self.transport_connect_prv(raddr).await
+    }
+
+    /// Create a new [`P2pConn`] to `raddr` and replace a old [`P2pConn`] by `conn_id`.
+    pub async fn transport_connect_and_replace(
+        &self,
+        raddr: &Multiaddr,
+        conn_id: &str,
+    ) -> Result<P2pConn> {
+        let transport = self
+            .ops
+            .get_transport_by_address(raddr)
+            .ok_or(Error::UnspportMultiAddr(raddr.to_owned()))?;
+
+        let mut conn = transport.connect(self, raddr).await?;
+
+        // notify event.
+        self.ops
+            .event_mediator
+            .raise(crate::Event::Connected {
+                conn_id: conn.id().to_owned(),
+                peer_id: conn.public_key().to_peer_id(),
+            })
+            .await;
+
+        log::trace!(target:"client","conn {}, connected event notified.", conn.id());
+
+        if let Err(err) = self.handshake(&mut conn).await {
+            log::error!("{}, setup error: {}", raddr, err);
+            _ = conn.close();
+            return Err(err);
+        } else {
+            log::trace!("{}, replace {}", raddr, conn_id);
+            self.connector
+                .authenticated(conn.clone(), false, Some(conn_id))
+                .await;
+
+            return Ok(conn);
+        }
     }
 
     /// Dynamically bind a transport listener to this switch.

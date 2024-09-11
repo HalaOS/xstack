@@ -27,7 +27,7 @@ use futures_quic::{
 use uuid::Uuid;
 use xstack::{
     identity::PublicKey,
-    multiaddr::{Multiaddr, Protocol, ToSockAddr},
+    multiaddr::{is_quic_transport, Multiaddr, Protocol, ToSockAddr},
     transport_syscall::{DriverConnection, DriverListener, DriverStream, DriverTransport},
     KeyStore, P2pConn, ProtocolStream, Switch, TransportListener,
 };
@@ -161,21 +161,7 @@ impl DriverTransport for QuicTransport {
 
     /// Check if this transport support the protocol stack represented by the `addr`.
     fn multiaddr_hint(&self, addr: &Multiaddr) -> bool {
-        for proto in addr.iter() {
-            if proto == Protocol::P2pCircuit {
-                return false;
-            }
-        }
-
-        let stack = addr.protocol_stack().collect::<Vec<_>>();
-
-        if stack.len() > 1 {
-            if stack[1] == "udp" {
-                return true;
-            }
-        }
-
-        return false;
+        is_quic_transport(addr)
     }
 }
 

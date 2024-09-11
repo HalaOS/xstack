@@ -9,6 +9,7 @@ fn main() {
         // Inputs must reside in some of include paths.
         .includes(&["proto"])
         .input("proto/circuit.proto")
+        .input("proto/DCUtR.proto")
         // Specify output directory relative to Cargo output directory.
         .out_dir("src/proto")
         .run_from_script();

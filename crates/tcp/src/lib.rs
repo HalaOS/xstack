@@ -9,7 +9,7 @@ use futures::{StreamExt, TryStreamExt};
 
 use rasi::net::{TcpListener, TcpStream};
 
-use xstack::multiaddr::{Multiaddr, Protocol, ToSockAddr};
+use xstack::multiaddr::{is_tcp_transport, Multiaddr, Protocol, ToSockAddr};
 use xstack::transport_syscall::DriverTransport;
 use xstack::Switch;
 use xstack::{P2pConn, TransportListener};
@@ -90,21 +90,7 @@ impl DriverTransport for TcpTransport {
 
     /// Check if this transport support the protocol stack represented by the `addr`.
     fn multiaddr_hint(&self, addr: &Multiaddr) -> bool {
-        for proto in addr.iter() {
-            if proto == Protocol::P2pCircuit {
-                return false;
-            }
-        }
-
-        let stack = addr.protocol_stack().collect::<Vec<_>>();
-
-        if stack.len() > 1 {
-            if stack[1] == "tcp" {
-                return true;
-            }
-        }
-
-        return false;
+        is_tcp_transport(addr)
     }
 }
 

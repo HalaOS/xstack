@@ -60,7 +60,7 @@ pub enum Error {
     PeerNotFound,
 
     #[error("Connect peer address list is empty.")]
-    ConnectAddresses,
+    EmptyPeerAddrs,
 
     #[error("Received mismatched ping response")]
     Ping,

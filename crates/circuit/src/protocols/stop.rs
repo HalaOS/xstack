@@ -25,7 +25,9 @@ use xstack::{
 };
 use xstack_tls::{create_ssl_acceptor, TlsConn};
 
-use crate::{CircuitV2Rpc, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP};
+use crate::{
+    CircuitV2Rpc, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP, PROTOCOL_DCUTR,
+};
 
 struct CircuitStopListener(Receiver<P2pConn>);
 
@@ -332,13 +334,35 @@ impl CircuitStopServerBuilder {
 
         let ssl_acceptor = create_ssl_acceptor(&self.switch).await?;
 
-        let conn =
-            TlsConn::accept(stream, local_addr, peer_addr, &ssl_acceptor, activities).await?;
+        let conn: P2pConn =
+            TlsConn::accept(stream, local_addr, peer_addr, &ssl_acceptor, activities)
+                .await?
+                .into();
+
+        // spawn_ok(self.try_upgrade(conn.clone()));
 
         Ok(sender
-            .send(conn.into())
+            .send(conn)
             .await
             .map_err(|_| Error::new(ErrorKind::BrokenPipe, ""))?)
+    }
+
+    #[allow(unused)]
+    async fn try_upgrade(self, mut conn: P2pConn) {
+        if let Err(err) = self.try_upgrade_prv(&mut conn).await {
+            log::error!(
+                "try upgrade circuit conn failed, from={}, err={}",
+                conn.peer_addr(),
+                err
+            );
+        }
+    }
+
+    async fn try_upgrade_prv(self, conn: &mut P2pConn) -> Result<()> {
+        // try handshake with DCUtR.
+        let (_stream, _) = conn.connect([PROTOCOL_DCUTR]).await.unwrap();
+
+        todo!()
     }
 }
 

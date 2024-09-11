@@ -2,13 +2,17 @@ use std::{
     fmt::Display,
     future::Future,
     time::{Duration, SystemTime},
+    usize,
 };
 
 use futures::{AsyncRead, AsyncWrite};
 use protobuf::{EnumOrUnknown, MessageField};
 
 use crate::{
-    proto::circuit::{self, hop_message, stop_message, HopMessage, Status, StopMessage},
+    proto::{
+        circuit::{self, hop_message, stop_message, HopMessage, Status, StopMessage},
+        DCUtR,
+    },
     Error, Result,
 };
 
@@ -224,3 +228,71 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
 }
 
 impl<S> CircuitV2Rpc for S where S: AsyncRead + AsyncWrite + Unpin {}
+
+/// An extension trait for circuit v2 protocol.
+pub trait DCUtRRpc: AsyncRead + AsyncWrite + Unpin {
+    /// Send a `DCUtR Connect` message via this stream.
+    fn dcutr_send_connect(self, observed_addrs: &[Multiaddr]) -> impl Future<Output = Result<()>>
+    where
+        Self: Sized,
+    {
+        let mut message = DCUtR::HolePunch::new();
+
+        message.type_ = Some(DCUtR::hole_punch::Type::CONNECT.into());
+        message.ObsAddrs = observed_addrs.iter().map(|addr| addr.to_vec()).collect();
+
+        async move { Ok(XStackRpc::xstack_send(self, &message).await?) }
+    }
+
+    /// Recv a `DCUtR Connect` message via this stream.
+    fn dcutr_recv_connect(self, max_recv_len: usize) -> impl Future<Output = Result<Vec<Multiaddr>>>
+    where
+        Self: Sized,
+    {
+        async move {
+            let message = XStackRpc::xstack_recv::<DCUtR::HolePunch>(self, max_recv_len).await?;
+
+            if message.type_ != Some(DCUtR::hole_punch::Type::CONNECT.into()) {
+                return Err(Error::DCUtRConnect);
+            }
+
+            let addrs = message
+                .ObsAddrs
+                .into_iter()
+                .map(|addr| Multiaddr::try_from(addr).map_err(|err| err.into()))
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(addrs)
+        }
+    }
+
+    /// Send a `DCUtR Sync` message via this stream.
+    fn dcutr_send_sync(self) -> impl Future<Output = Result<()>>
+    where
+        Self: Sized,
+    {
+        let mut message = DCUtR::HolePunch::new();
+
+        message.type_ = Some(DCUtR::hole_punch::Type::SYNC.into());
+
+        async move { Ok(XStackRpc::xstack_send(self, &message).await?) }
+    }
+
+    /// Recv a `DCUtR Sync` message via this stream.
+    fn dcutr_recv_sync(self, max_recv_len: usize) -> impl Future<Output = Result<()>>
+    where
+        Self: Sized,
+    {
+        async move {
+            let message = XStackRpc::xstack_recv::<DCUtR::HolePunch>(self, max_recv_len).await?;
+
+            if message.type_ != Some(DCUtR::hole_punch::Type::SYNC.into()) {
+                return Err(Error::DCUtRSync);
+            }
+
+            Ok(())
+        }
+    }
+}
+
+impl<S> DCUtRRpc for S where S: AsyncRead + AsyncWrite + Unpin {}

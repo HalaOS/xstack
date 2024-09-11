@@ -23,3 +23,6 @@ pub const PROTOCOL_CIRCUIT_RELAY_STOP: &str = "/libp2p/circuit/relay/0.2.0/stop"
 
 /// Protocol id for `hop protocol`.
 pub const PROTOCOL_CIRCUIT_RELAY_HOP: &str = "/libp2p/circuit/relay/0.2.0/hop";
+
+/// Protocol id for `DCUtR`.
+pub const PROTOCOL_DCUTR: &str = "/libp2p/dcutr";
