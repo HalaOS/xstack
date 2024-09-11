@@ -10,7 +10,6 @@ use std::{
 
 use async_trait::async_trait;
 
-use chrono::Local;
 use futures::{
     channel::mpsc::{channel, Receiver, Sender},
     SinkExt, StreamExt, TryStreamExt,
@@ -203,9 +202,9 @@ impl CircuitStopServerBuilder {
         let peer_addr = stream.peer_addr().clone();
 
         log::trace!(
-            "reserve from {}, expire={}, {}",
+            "reserve from {}, expire={:?}, {}",
             peer_addr,
-            chrono::DateTime::<Local>::from(reservation.expire).to_rfc3339(),
+            reservation.expire,
             reservation
                 .limit
                 .map(|limit| limit.to_string())

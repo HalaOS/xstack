@@ -18,7 +18,6 @@ unsigned-varint = { workspace = true, features = ["futures"] }
 async-trait = { workspace = true }
 futures-map = { workspace = true }
 xstack-tls = { workspace = true }
-chrono = { workspace = true }
 
 [dev-dependencies]
 xstack-kad = { workspace = true }

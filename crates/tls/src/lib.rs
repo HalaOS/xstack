@@ -62,7 +62,7 @@ pub async fn create_ssl_acceptor(switch: &Switch) -> Result<SslAcceptor> {
             let peer_id = xstack_x509::verify(cert)
                 .map_err(|err| {
                     log::error!("xstack_x509 verify failed: {}", err);
-                    SslVerifyError::Invalid(SslAlert::CERTIFICATE_UNKNOWN)
+                    SslVerifyError::Invalid(SslAlert::ACCESS_DENIED)
                 })?
                 .to_peer_id();
 
@@ -195,7 +195,7 @@ impl TlsConn {
             let peer_id = xstack_x509::verify(cert)
                 .map_err(|err| {
                     log::error!("{}", err);
-                    SslVerifyError::Invalid(SslAlert::BAD_CERTIFICATE)
+                    SslVerifyError::Invalid(SslAlert::ACCESS_DENIED)
                 })?
                 .to_peer_id();
 

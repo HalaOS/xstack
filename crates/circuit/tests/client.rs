@@ -127,6 +127,8 @@ async fn stop_server() {
 
     AutoNatClient::bind_with(&switch);
 
+    let stop_server = CircuitStopServer::bind_with(&switch).start();
+
     let peer_id = PeerId::random();
 
     let now = Instant::now();
@@ -134,8 +136,6 @@ async fn stop_server() {
     let _ = kad.find_node(&peer_id).await.unwrap();
 
     log::trace!("kad search peer_d={}, times={:?}", peer_id, now.elapsed(),);
-
-    let stop_server = CircuitStopServer::bind_with(&switch).start();
 
     while stop_server.reservations() == 0 {
         log::trace!("waiting reserve calls... {}", stop_server.reservations());
