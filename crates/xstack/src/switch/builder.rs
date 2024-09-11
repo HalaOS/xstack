@@ -63,7 +63,7 @@ impl SwitchOptions {
     pub(super) fn get_transport_by_address(&self, laddr: &Multiaddr) -> Option<&Transport> {
         self.transports
             .iter()
-            .find(|transport| transport.multiaddr_hit(laddr))
+            .find(|transport| transport.multiaddr_hint(laddr))
     }
 }
 

@@ -120,7 +120,7 @@ pub mod transport_syscall {
         async fn connect(&self, switch: &Switch, raddr: &Multiaddr) -> Result<P2pConn>;
 
         /// Check if this transport support the protocol stack represented by the `addr`.
-        fn multiaddr_hit(&self, addr: &Multiaddr) -> bool;
+        fn multiaddr_hint(&self, addr: &Multiaddr) -> bool;
 
         /// Returns the actives connection number.
         fn activities(&self) -> usize;

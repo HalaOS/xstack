@@ -12,9 +12,9 @@ use async_trait::async_trait;
 
 use futures::{
     channel::mpsc::{channel, Receiver, Sender},
-    stream::FuturesUnordered,
     SinkExt, StreamExt, TryStreamExt,
 };
+use futures_map::FuturesUnorderedMap;
 use rasi::{task::spawn_ok, timer::sleep};
 use xstack::{
     events,
@@ -160,16 +160,20 @@ impl CircuitStopServerBuilder {
     }
 
     async fn run_reservation_client(&self) {
-        let mut unordered = FuturesUnordered::new();
+        let mut unordered = FuturesUnorderedMap::new();
+
+        let mut id = 0;
 
         for _ in 0..self.channel_limits {
-            unordered.push(self.clone().reservation_client_loop());
+            unordered.insert(id, self.clone().reservation_client_loop());
+            id += 1;
         }
 
         while let Some(_) = unordered.next().await {
             if self.switch.nat().await == AutoNAT::NAT {
                 while unordered.len() < self.channel_limits {
-                    unordered.push(self.clone().reservation_client_loop());
+                    unordered.insert(id, self.clone().reservation_client_loop());
+                    id += 1;
                 }
             }
         }

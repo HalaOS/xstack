@@ -6,7 +6,8 @@ use std::{
     sync::Arc,
 };
 
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::StreamExt;
+use futures_map::FuturesUnorderedMap;
 use rasi::timer::TimeoutExt;
 use xstack::{global_switch, identity::PeerId, multiaddr::Multiaddr, PeerInfo, Switch};
 
@@ -85,7 +86,7 @@ impl<'a> Recursively<'a> {
     {
         let concurrency = self.concurrency.into();
 
-        let mut unorderd = FuturesUnordered::new();
+        let mut unorderd = FuturesUnorderedMap::new();
 
         while let Some(peer_id) = self.candidates.pop_front() {
             loop {
@@ -117,7 +118,7 @@ impl<'a> Recursively<'a> {
 
                 let fut = alg.route(&peer_id);
 
-                unorderd.push(async move { (peer_id, fut.await) });
+                unorderd.insert(peer_id, fut);
 
                 break;
             }

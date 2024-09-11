@@ -103,7 +103,7 @@ impl DriverTransport for CircuitTransport {
     }
 
     /// Check if this transport support the protocol stack represented by the `addr`.
-    fn multiaddr_hit(&self, addr: &Multiaddr) -> bool {
+    fn multiaddr_hint(&self, addr: &Multiaddr) -> bool {
         let circuit_addr = Multiaddr::empty().with(Protocol::P2pCircuit);
 
         // // for bind function.

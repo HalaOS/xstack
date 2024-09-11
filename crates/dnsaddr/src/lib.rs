@@ -85,7 +85,7 @@ impl DnsAddr {
             }
 
             for addr in cached {
-                if self.multiaddr_hit(&addr) {
+                if self.multiaddr_hint(&addr) {
                     dnsaddrs.push(addr);
                 } else {
                     parsed.push(addr);
@@ -139,7 +139,7 @@ impl DriverTransport for DnsAddr {
     }
 
     /// Check if this transport support the protocol stack represented by the `addr`.
-    fn multiaddr_hit(&self, addr: &Multiaddr) -> bool {
+    fn multiaddr_hint(&self, addr: &Multiaddr) -> bool {
         for protocol in addr.iter() {
             match protocol {
                 xstack::multiaddr::Protocol::Dns(_) => return true,
