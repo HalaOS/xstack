@@ -9,7 +9,7 @@ use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 use xstack::{
     identity::PeerId,
     multiaddr::{Multiaddr, Protocol},
-    Switch, XStackRpc, PROTOCOL_IPFS_PING,
+    AutoNAT, Switch, XStackRpc, PROTOCOL_IPFS_PING,
 };
 use xstack_autonat::AutoNatClient;
 use xstack_circuit::{CircuitStopServer, CircuitTransport, DCUtRUpgrader};
@@ -129,7 +129,24 @@ async fn upgrade() {
 
     DCUtRUpgrader::bind_with(&switch);
 
-    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
+    CircuitStopServer::bind_with(&switch).start();
+
+    while switch.nat().await == AutoNAT::Unknown || switch.listen_addrs().await.is_empty() {
+        log::trace!(
+            "switch network is {:?}, listen={:?}",
+            switch.nat().await,
+            switch.listen_addrs().await
+        );
+        kad.find_node(&PeerId::random()).await.unwrap();
+    }
+
+    log::trace!(
+        "switch network is {:?}, listen={:?}",
+        switch.nat().await,
+        switch.listen_addrs().await
+    );
+
+    let peer_id = "12D3KooWRU3k4exFQdNQdoZZEkbmtUnTZLHtaTQuCqg4G2QsZKNP"
         .parse()
         .unwrap();
 

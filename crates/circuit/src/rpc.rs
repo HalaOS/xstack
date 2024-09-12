@@ -229,7 +229,9 @@ pub trait CircuitV2Rpc: AsyncRead + AsyncWrite + Unpin {
 
 impl<S> CircuitV2Rpc for S where S: AsyncRead + AsyncWrite + Unpin {}
 
-/// An extension trait for circuit v2 protocol.
+/// An extension trait for [`DCUtR`] protocol.
+///
+/// [`DCUtR`]: https://github.com/libp2p/specs/blob/master/relay/DCUtR.md
 pub trait DCUtRRpc: AsyncRead + AsyncWrite + Unpin {
     /// Send a `DCUtR Connect` message via this stream.
     fn dcutr_send_connect(self, observed_addrs: &[Multiaddr]) -> impl Future<Output = Result<()>>

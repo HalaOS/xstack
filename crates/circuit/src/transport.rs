@@ -78,24 +78,51 @@ impl DriverTransport for CircuitTransport {
 
         log::trace!("circuit_v2, connect to hop={:?}", raddr);
 
-        let (mut stream, _) = switch.connect(&raddr, [PROTOCOL_CIRCUIT_RELAY_HOP]).await?;
+        let mut stream = match switch.connect(&raddr, [PROTOCOL_CIRCUIT_RELAY_HOP]).await {
+            Ok((stream, _)) => stream,
+            Err(err) => {
+                log::error!("circuit_v2, connect to hop={:?} with error: {}", raddr, err);
+                return Err(err.into());
+            }
+        };
 
-        let limits =
-            CircuitV2Rpc::circuit_v2_hop_connect(&mut stream, &peer_id, switch.max_packet_size)
-                .await?;
+        let limits = match CircuitV2Rpc::circuit_v2_hop_connect(
+            &mut stream,
+            &peer_id,
+            switch.max_packet_size,
+        )
+        .await
+        {
+            Ok(limits) => limits,
+            Err(err) => {
+                log::error!(
+                    "circuit_v2, connect to hop={:?} handshake with error: {}",
+                    raddr,
+                    err
+                );
+                return Err(err.into());
+            }
+        };
 
         log::trace!("circuit_v2, connection limits={:?}", limits);
 
         let local_addr = stream.local_addr().clone();
 
-        let conn = TlsConn::connect(
+        let conn = match TlsConn::connect(
             &switch,
             stream,
             local_addr,
             peer_addr,
             self.activities.clone(),
         )
-        .await?;
+        .await
+        {
+            Ok(conn) => conn,
+            Err(err) => {
+                log::trace!("circuit_v2, connection handshaked with error: {}", err);
+                return Err(err.into());
+            }
+        };
 
         log::trace!("circuit_v2, connection handshaked");
 

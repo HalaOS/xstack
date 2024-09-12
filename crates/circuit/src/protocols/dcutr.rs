@@ -41,6 +41,8 @@ impl DCUtRUpgrader {
     async fn server_loop_prv(self) -> Result<()> {
         let mut incoming = self.switch.bind([PROTOCOL_DCUTR]).await?.into_incoming();
 
+        log::trace!("start DCUtR upgrade loop.");
+
         while let Some((stream, _)) = incoming.try_next().await? {
             let this = self.clone();
 
@@ -102,6 +104,7 @@ impl DCUtRUpgrader {
         let mut last_error = None;
 
         for addr in sync_addrs {
+            log::info!("try hole punching to {}", addr);
             match self.switch.transport_connect(&addr).await {
                 Ok(_) => {
                     self.switch.connector.close(stream.conn_id()).await;

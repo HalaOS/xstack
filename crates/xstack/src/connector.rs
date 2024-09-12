@@ -246,6 +246,10 @@ impl connector_syscall::DriverConnector for ConnPool {
         }
 
         if let Some(peer_info) = switch.lookup_peer_info(peer_id).await? {
+            if peer_info.addrs.is_empty() {
+                return Err(crate::Error::PeerNotFound.into());
+            }
+
             return self
                 .connect_raddrs(switch, peer_info.addrs.iter().collect())
                 .await;

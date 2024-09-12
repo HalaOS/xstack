@@ -147,14 +147,21 @@ impl Switch {
 
         identity.set_agentVersion(self.ops.agent_version.to_owned());
 
-        identity.listenAddrs = self
-            .listen_addrs()
-            .await
+        identity.protocols = Self::merge_protos(self.ops.stream_dispatcher.protos().await);
+
+        let listen_addrs = self.listen_addrs().await;
+
+        log::trace!(
+            "nat={:?} protos={:?} listen_addrs={:?}",
+            self.nat().await,
+            identity.protocols,
+            listen_addrs
+        );
+
+        identity.listenAddrs = listen_addrs
             .iter()
             .map(|addr| addr.to_vec())
             .collect::<Vec<_>>();
-
-        identity.protocols = self.ops.stream_dispatcher.protos().await;
 
         let buf = identity.write_to_bytes()?;
 
