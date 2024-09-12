@@ -75,3 +75,18 @@ pub fn is_quic_transport(addr: &Multiaddr) -> bool {
 
     false
 }
+
+/// Returns true if this [`Multiaddr`] is supported by `dnsaddr` transport.
+pub fn is_dnsaddr_transport(addr: &Multiaddr) -> bool {
+    for protocol in addr.iter() {
+        match protocol {
+            Protocol::Dns(_) => return true,
+            Protocol::Dns4(_) => return true,
+            Protocol::Dns6(_) => return true,
+            Protocol::Dnsaddr(_) => return true,
+            _ => {}
+        }
+    }
+
+    false
+}

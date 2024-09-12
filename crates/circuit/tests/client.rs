@@ -238,3 +238,13 @@ async fn stop_server() {
 
     stream.xstack_ping().await.unwrap();
 }
+
+#[futures_test::test]
+async fn connect_router() {
+    let switch = init().await;
+
+    switch
+        .connect("/ip4/118.114.14.49/tcp/37968", [PROTOCOL_IPFS_PING])
+        .await
+        .unwrap();
+}

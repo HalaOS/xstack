@@ -24,7 +24,7 @@ use futures_dnsv2::client::DnsLookup;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rasi::timer::TimeoutExt;
-use xstack::multiaddr::Multiaddr;
+use xstack::multiaddr::{is_dnsaddr_transport, Multiaddr};
 use xstack::transport_syscall::DriverTransport;
 use xstack::{Error, Switch};
 use xstack::{P2pConn, TransportListener};
@@ -140,17 +140,7 @@ impl DriverTransport for DnsAddr {
 
     /// Check if this transport support the protocol stack represented by the `addr`.
     fn multiaddr_hint(&self, addr: &Multiaddr) -> bool {
-        for protocol in addr.iter() {
-            match protocol {
-                xstack::multiaddr::Protocol::Dns(_) => return true,
-                xstack::multiaddr::Protocol::Dns4(_) => return true,
-                xstack::multiaddr::Protocol::Dns6(_) => return true,
-                xstack::multiaddr::Protocol::Dnsaddr(_) => return true,
-                _ => {}
-            }
-        }
-
-        false
+        is_dnsaddr_transport(addr)
     }
 }
 

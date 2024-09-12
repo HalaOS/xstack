@@ -165,54 +165,6 @@ impl Switch {
         Ok(())
     }
 
-    async fn transport_connect_prv(&self, raddr: &Multiaddr) -> Result<P2pConn> {
-        let transport = self
-            .ops
-            .get_transport_by_address(raddr)
-            .ok_or(Error::UnspportMultiAddr(raddr.to_owned()))?;
-
-        log::trace!("{}, connector::connect", raddr);
-
-        let connected = self.ops.connector.connect(self, transport, raddr).await?;
-
-        log::trace!("{}, connector::connect returned.", raddr);
-
-        let conn = match connected {
-            crate::Connected::New(mut conn) => {
-                log::trace!("{}, transport connection established.", raddr);
-
-                // notify event.
-                self.ops
-                    .event_mediator
-                    .raise(crate::Event::Connected {
-                        conn_id: conn.id().to_owned(),
-                        peer_id: conn.public_key().to_peer_id(),
-                    })
-                    .await;
-
-                log::trace!("conn {}, connected event notified.", conn.id());
-
-                if let Err(err) = self.handshake(&mut conn).await {
-                    log::error!("{}, setup error: {}", raddr, err);
-                    _ = conn.close();
-                    return Err(err);
-                } else {
-                    log::trace!("{}, setup success", raddr);
-                    self.connector
-                        .authenticated(conn.clone(), false, None)
-                        .await;
-                    conn
-                }
-            }
-            crate::Connected::Authenticated(conn) => {
-                log::trace!("{}, transport connection reused.", raddr);
-                conn
-            }
-        };
-
-        Ok(conn)
-    }
-
     /// Create a new connection to peer by id.
     ///
     /// This function will first check for a local connection cache,
@@ -231,34 +183,10 @@ impl Switch {
     async fn transport_connect_raddrs(&self, mut raddrs: Vec<Multiaddr>) -> Result<P2pConn> {
         raddrs.shuffle(&mut thread_rng());
 
-        // let mut stream = futures::stream::iter(raddrs)
-        //     .map(|raddr| (self.clone(), raddr))
-        //     .chunks(self.connect_replication)
-        //     .flat_map(|raddrs| {
-        //         let unordered = FuturesUnordered::new();
-
-        //         // let unordered = FuturesUnordered::new();
-
-        //         for (switch, raddr) in raddrs {
-        //             unordered.push(async move { switch.transport_connect_prv(&raddr).await });
-        //         }
-
-        //         unordered
-        //     });
-
         let mut last_error = None;
 
-        // while let Some(r) = stream.next().await {
-        //     match r {
-        //         Ok(conn) => return Ok(conn),
-        //         Err(err) => {
-        //             last_error = Some(err);
-        //         }
-        //     }
-        // }
-
         for raddr in raddrs {
-            match self.transport_connect_prv(&raddr).await {
+            match self.transport_connect(&raddr).await {
                 Ok(conn) => return Ok(conn),
                 Err(err) => {
                     log::error!("connect to {} with error: {}", raddr, err);
@@ -322,22 +250,12 @@ impl Switch {
 
         Ok(())
     }
-}
-
-impl Switch {
-    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
-    pub fn new<A>(agent_version: A) -> SwitchBuilder
-    where
-        A: AsRef<str>,
-    {
-        SwitchBuilder::new(agent_version.as_ref().to_owned())
-    }
 
     /// Connect to peer with provided [`raddr`](Multiaddr).
     ///
     /// This function first query the route table to get the peer id,
     /// if exists then check for a local connection cache.
-    pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<P2pConn> {
+    async fn transport_connect_with_reverse_lookup(&self, raddr: &Multiaddr) -> Result<P2pConn> {
         log::trace!("{}, try establish transport connection", raddr);
 
         if let Some(peer_id) = self.lookup_peer_id(raddr).await? {
@@ -350,45 +268,75 @@ impl Switch {
             return self.transport_connect_to(&peer_id).await;
         }
 
-        self.transport_connect_prv(raddr).await
+        self.transport_connect(raddr).await
+    }
+}
+
+impl Switch {
+    /// Uses `agent_version` string to create a switch [`builder`](SwitchBuilder).
+    pub fn new<A>(agent_version: A) -> SwitchBuilder
+    where
+        A: AsRef<str>,
+    {
+        SwitchBuilder::new(agent_version.as_ref().to_owned())
     }
 
-    /// Create a new [`P2pConn`] to `raddr` and replace a old [`P2pConn`] by `conn_id`.
+    /// Connect to peer directly by `raddr` and relpace connection by [`conn_id`]
     pub async fn transport_connect_and_replace(
         &self,
         raddr: &Multiaddr,
-        conn_id: &str,
+        conn_id: Option<&str>,
     ) -> Result<P2pConn> {
         let transport = self
             .ops
             .get_transport_by_address(raddr)
             .ok_or(Error::UnspportMultiAddr(raddr.to_owned()))?;
 
-        let mut conn = transport.connect(self, raddr).await?;
+        log::trace!("{}, connector::connect", raddr);
 
-        // notify event.
-        self.ops
-            .event_mediator
-            .raise(crate::Event::Connected {
-                conn_id: conn.id().to_owned(),
-                peer_id: conn.public_key().to_peer_id(),
-            })
-            .await;
+        let connected = self.ops.connector.connect(self, transport, raddr).await?;
 
-        log::trace!(target:"client","conn {}, connected event notified.", conn.id());
+        log::trace!("{}, connector::connect returned.", raddr);
 
-        if let Err(err) = self.handshake(&mut conn).await {
-            log::error!("{}, setup error: {}", raddr, err);
-            _ = conn.close();
-            return Err(err);
-        } else {
-            log::trace!("{}, replace {}", raddr, conn_id);
-            self.connector
-                .authenticated(conn.clone(), false, Some(conn_id))
-                .await;
+        let conn = match connected {
+            crate::Connected::New(mut conn) => {
+                log::trace!("{}, transport connection established.", raddr);
 
-            return Ok(conn);
-        }
+                // notify event.
+                self.ops
+                    .event_mediator
+                    .raise(crate::Event::Connected {
+                        conn_id: conn.id().to_owned(),
+                        peer_id: conn.public_key().to_peer_id(),
+                    })
+                    .await;
+
+                log::trace!("conn {}, connected event notified.", conn.id());
+
+                if let Err(err) = self.handshake(&mut conn).await {
+                    log::error!("{}, setup error: {}", raddr, err);
+                    _ = conn.close();
+                    return Err(err);
+                } else {
+                    log::trace!("{}, setup success", raddr);
+                    self.connector
+                        .authenticated(conn.clone(), false, conn_id)
+                        .await;
+                    conn
+                }
+            }
+            crate::Connected::Authenticated(conn) => {
+                log::trace!("{}, transport connection reused.", raddr);
+                conn
+            }
+        };
+
+        Ok(conn)
+    }
+
+    /// Connect to peer directly by `raddr`.
+    pub async fn transport_connect(&self, raddr: &Multiaddr) -> Result<P2pConn> {
+        self.transport_connect_and_replace(raddr, None).await
     }
 
     /// Dynamically bind a transport listener to this switch.
@@ -443,9 +391,13 @@ impl Switch {
             .map_err(|err| Error::Other(format!("{:?}", err)))?
         {
             ConnectTo::PeerIdRef(peer_id) => self.transport_connect_to(peer_id).await?,
-            ConnectTo::MultiaddrRef(raddr) => self.transport_connect(raddr).await?,
+            ConnectTo::MultiaddrRef(raddr) => {
+                self.transport_connect_with_reverse_lookup(raddr).await?
+            }
             ConnectTo::PeerId(peer_id) => self.transport_connect_to(&peer_id).await?,
-            ConnectTo::Multiaddr(raddr) => self.transport_connect(&raddr).await?,
+            ConnectTo::Multiaddr(raddr) => {
+                self.transport_connect_with_reverse_lookup(&raddr).await?
+            }
             ConnectTo::MultiaddrsRef(raddrs) => {
                 self.transport_connect_raddrs(raddrs.to_vec()).await?
             }

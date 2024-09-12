@@ -104,7 +104,7 @@ impl DCUtRUpgrader {
         for addr in sync_addrs {
             match self
                 .switch
-                .transport_connect_and_replace(&addr, stream.conn_id())
+                .transport_connect_and_replace(&addr, Some(stream.conn_id()))
                 .await
             {
                 Ok(_) => {
