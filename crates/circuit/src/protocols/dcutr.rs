@@ -102,13 +102,12 @@ impl DCUtRUpgrader {
         let mut last_error = None;
 
         for addr in sync_addrs {
-            match self
-                .switch
-                .transport_connect_and_replace(&addr, Some(stream.conn_id()))
-                .await
-            {
+            match self.switch.transport_connect(&addr).await {
                 Ok(_) => {
+                    self.switch.connector.close(stream.conn_id()).await;
+
                     log::trace!("hole punching to {}, is success.", addr);
+
                     return Ok(());
                 }
                 Err(err) => {

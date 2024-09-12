@@ -273,7 +273,7 @@ pub async fn generate(keypair: &KeyStore) -> Result<(Vec<u8>, Zeroizing<Vec<u8>>
 ///
 /// Refer to [`tls`] crate for complete code
 ///
-/// [`tcp`]: https://github.com/HalaOS/xstack/tree/main/crates/tls
+/// [`tls`]: https://github.com/HalaOS/xstack/tree/main/crates/tls
 pub fn verify<D: AsRef<[u8]>>(der: D) -> Result<PublicKey> {
     let cert = Certificate::from_der(der.as_ref())?;
 

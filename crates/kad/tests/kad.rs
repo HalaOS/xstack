@@ -95,7 +95,7 @@ async fn find_node() {
             switch.peer_book.len().await,
             kad.len(),
             switch.nat().await,
-            switch.connector.cached().await,
+            switch.connector.len().await,
             transport_status,
         );
 

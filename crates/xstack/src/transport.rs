@@ -45,7 +45,7 @@ use crate::{driver_wrapper, switch::Switch, XStackRpc, PROTOCOL_IPFS_PING};
 /// ###  When a *connect* request is arrived
 ///
 /// - The `Switch` loop the whole registered *Transports* list
-/// and call their [`multiaddr_hit`](transport_syscall::DriverTransport::multiaddr_hit) function;
+/// and call their [`multiaddr_hit`](transport_syscall::DriverTransport::multiaddr_hint) function;
 /// when a *Transport* returns true,  stops the loop process and immediately calls its
 /// [`connect`](transport_syscall::DriverTransport::connect) function to create a new
 /// [*transport connection*](transport_syscall::DriverConnection);
@@ -66,7 +66,7 @@ use crate::{driver_wrapper, switch::Switch, XStackRpc, PROTOCOL_IPFS_PING};
 /// ### When a *bind* request is arrived
 ///
 /// - The `Switch` loop the whole registered *Transports* list
-/// and call their [`multiaddr_hit`](transport_syscall::DriverTransport::multiaddr_hit) function;
+/// and call their [`multiaddr_hit`](transport_syscall::DriverTransport::multiaddr_hint) function;
 /// when a *Transport* returns true,  stops the loop process and immediately calls its
 /// [`bind`](transport_syscall::DriverTransport::bind) function to create a new
 /// [*transport listener*](transport_syscall::DriverListener);
