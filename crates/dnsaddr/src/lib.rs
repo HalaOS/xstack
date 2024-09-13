@@ -20,7 +20,7 @@ use std::io::Result;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use futures_dnsv2::client::DnsLookup;
+use futures_dnsv2::nslookup::DnsLookup;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rasi::timer::TimeoutExt;

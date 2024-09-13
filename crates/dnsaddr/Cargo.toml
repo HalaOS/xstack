@@ -15,7 +15,7 @@ thiserror = { workspace = true }
 xstack-tcp = { workspace = true }
 xstack-quic = { workspace = true }
 async-trait = { workspace = true }
-futures-dnsv2 = { workspace = true, features = ["rasi"] }
+futures-dnsv2 = { workspace = true, features = ["rasi", "nslookup"] }
 rand = { workspace = true }
 rasi = { workspace = true }
 

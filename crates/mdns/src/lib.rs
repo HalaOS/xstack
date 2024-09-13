@@ -138,6 +138,8 @@ impl MdnsProtocol {
                 }
             };
 
+            log::trace!("{:?}", packet);
+
             if packet.header.query {
                 self.handle_request(packet).await?;
                 continue;
