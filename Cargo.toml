@@ -35,6 +35,8 @@ protobuf-json-mapping = "3.5.0"
 libc = "^0.2"
 bs58 = "0.5.1"
 chrono = "^0.4"
+dns-parser = "0.8.0"
+hickory-proto = "^0.24.1"
 #libp2p
 multiaddr = "^0.18"
 libp2p-identity = { version = "^0.2" }

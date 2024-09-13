@@ -146,7 +146,7 @@ async fn upgrade() {
         switch.listen_addrs().await
     );
 
-    let peer_id = "12D3KooWRU3k4exFQdNQdoZZEkbmtUnTZLHtaTQuCqg4G2QsZKNP"
+    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
         .parse()
         .unwrap();
 

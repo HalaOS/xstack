@@ -1,0 +1,31 @@
+[package]
+description = "The libp2p mdns protocol implementation for xstack."
+documentation = "https://docs.rs/xstack-mdns"
+edition.workspace = true
+license = "MIT"
+name = "xstack-mdns"
+repository = "https://github.com/HalaOS/xstack.git"
+version.workspace = true
+
+[dependencies]
+dns-parser = { workspace = true }
+rasi = { workspace = true }
+xstack = { workspace = true }
+log = { workspace = true }
+futures = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+hickory-proto = { workspace = true }
+
+[dev-dependencies]
+quickcheck = { workspace = true }
+futures-test = { workspace = true }
+rasi-mio = { workspace = true }
+pretty_env_logger = { workspace = true }
+xstack-tcp = { workspace = true }
+xstack = { workspace = true, features = ["global_register"] }
+
+[features]
+default = ["global_register"]
+global_register = []

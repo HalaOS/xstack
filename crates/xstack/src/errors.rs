@@ -1,3 +1,5 @@
+use std::{str::Utf8Error, string::FromUtf8Error};
+
 use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use multistream_select::NegotiationError;
@@ -67,6 +69,12 @@ pub enum Error {
 
     #[error("Invalid autonat response packet received")]
     AutoNatResponse,
+
+    #[error(transparent)]
+    Utf8Error(Utf8Error),
+
+    #[error(transparent)]
+    FromUtf8Error(FromUtf8Error),
 }
 
 /// The result type for this module.
