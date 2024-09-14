@@ -408,7 +408,7 @@ mod tests {
         static INIT: Once = Once::new();
 
         INIT.call_once(|| {
-            _ = pretty_env_logger::try_init_timed();
+            // _ = pretty_env_logger::try_init_timed();
 
             register_mio_network();
             register_mio_timer();

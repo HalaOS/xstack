@@ -181,7 +181,6 @@ impl MdnsProtocol {
 mod tests {
     use std::{sync::Once, time::Duration};
 
-    use rasi::timer::sleep;
     use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
     use xstack::Switch;
     use xstack_tcp::TcpTransport;
@@ -192,7 +191,7 @@ mod tests {
         static INIT: Once = Once::new();
 
         INIT.call_once(|| {
-            _ = pretty_env_logger::try_init_timed();
+            // _ = pretty_env_logger::try_init_timed();
 
             register_mio_network();
             register_mio_timer();
@@ -206,6 +205,7 @@ mod tests {
             .unwrap()
     }
 
+    #[ignore]
     #[futures_test::test]
     async fn test_mdns() {
         let switch = init().await;

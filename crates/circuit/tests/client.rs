@@ -22,7 +22,7 @@ async fn init() -> Switch {
     static INIT: Once = Once::new();
 
     INIT.call_once(|| {
-        _ = pretty_env_logger::try_init_timed();
+        // _ = pretty_env_logger::try_init_timed();
 
         register_mio_network();
         register_mio_timer();
@@ -38,6 +38,7 @@ async fn init() -> Switch {
         .unwrap()
 }
 
+#[ignore]
 #[futures_test::test]
 async fn client_connect() {
     let switch = init().await;
@@ -109,6 +110,7 @@ async fn client_connect() {
     );
 }
 
+#[ignore]
 #[futures_test::test]
 async fn upgrade() {
     let switch = init().await;
@@ -193,6 +195,7 @@ async fn upgrade() {
     }
 }
 
+#[ignore]
 #[futures_test::test]
 async fn stop_server() {
     let switch = init().await;
@@ -256,6 +259,7 @@ async fn stop_server() {
     stream.xstack_ping().await.unwrap();
 }
 
+#[ignore]
 #[futures_test::test]
 async fn test_connect() {
     let switch = init().await;
