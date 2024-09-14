@@ -8,7 +8,6 @@ repository = "https://github.com/HalaOS/xstack.git"
 version.workspace = true
 
 [dependencies]
-dns-parser = { workspace = true }
 rasi = { workspace = true }
 xstack = { workspace = true }
 log = { workspace = true }
@@ -16,7 +15,7 @@ futures = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }
 uuid = { workspace = true }
-hickory-proto = { workspace = true }
+futures-dnsv2 = { workspace = true }
 
 [dev-dependencies]
 quickcheck = { workspace = true }
