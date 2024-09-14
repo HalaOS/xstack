@@ -12,7 +12,9 @@ use xstack::{
     AutoNAT, Switch, XStackRpc, PROTOCOL_IPFS_PING,
 };
 use xstack_autonat::AutoNatClient;
-use xstack_circuit::{CircuitStopServer, CircuitTransport, DCUtRUpgrader};
+use xstack_circuit::{
+    CircuitStopServer, CircuitTransport, DCUtRUpgrader, PROTOCOL_CIRCUIT_RELAY_STOP,
+};
 use xstack_dnsaddr::DnsAddr;
 use xstack_kad::KademliaRouter;
 use xstack_quic::QuicTransport;
@@ -146,50 +148,49 @@ async fn upgrade() {
         switch.listen_addrs().await
     );
 
-    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
-        .parse()
+    let peers = switch
+        .choose_peers(PROTOCOL_CIRCUIT_RELAY_STOP, 100)
+        .await
         .unwrap();
-
-    let now = Instant::now();
-
-    let peer_info = kad.find_node(&peer_id).await.unwrap().expect("found peer");
-
-    log::trace!(
-        "kad search peer_d={}, times={:?} success",
-        peer_id,
-        now.elapsed(),
-    );
 
     let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
 
-    let addrs = peer_info
-        .addrs
-        .iter()
-        .flat_map(|addr| {
-            if addr.ends_with(&circuit_suffix) {
-                Some(addr.clone().with_p2p(peer_id))
-            } else {
-                None
+    for peer_id in peers {
+        if let Some(peer_info) = switch.lookup_peer_info(&peer_id).await.unwrap() {
+            let addrs = peer_info
+                .addrs
+                .iter()
+                .flat_map(|addr| {
+                    if addr.ends_with(&circuit_suffix) {
+                        Some(addr.clone().with_p2p(peer_id))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap();
+
+            if !addrs.is_empty() {
+                log::trace!("find target={}, raddrs={:?}", peer_id, addrs);
+
+                let now = Instant::now();
+
+                let (mut stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
+
+                loop {
+                    XStackRpc::xstack_ping(&mut stream).await.unwrap();
+
+                    log::trace!(
+                        "circuit_v2 ping peer_id={}: times={:?}, raddr={}",
+                        peer_id,
+                        now.elapsed(),
+                        stream.peer_addr(),
+                    );
+
+                    sleep(Duration::from_secs(60)).await;
+                }
             }
-        })
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .unwrap();
-
-    let now = Instant::now();
-
-    let (mut stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
-
-    loop {
-        XStackRpc::xstack_ping(&mut stream).await.unwrap();
-
-        log::trace!(
-            "circuit_v2 ping peer_id={}: times={:?}, raddr={}",
-            peer_id,
-            now.elapsed(),
-            stream.peer_addr(),
-        );
-
-        sleep(Duration::from_secs(60)).await;
+        }
     }
 }
 
