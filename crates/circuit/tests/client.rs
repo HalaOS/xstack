@@ -195,6 +195,90 @@ async fn upgrade() {
 }
 
 #[futures_test::test]
+async fn upgrade1() {
+    let switch = init().await;
+
+    let kad = KademliaRouter::with(&switch)
+            .with_seeds([
+                "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+		        "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+		        "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+            ])
+            .await
+            .unwrap();
+
+    AutoNatClient::bind_with(&switch);
+
+    DCUtRUpgrader::bind_with(&switch);
+
+    CircuitStopServer::bind_with(&switch).start();
+
+    while switch.nat().await == AutoNAT::Unknown || switch.listen_addrs().await.is_empty() {
+        log::trace!(
+            "switch network is {:?}, listen={:?}",
+            switch.nat().await,
+            switch.listen_addrs().await
+        );
+        kad.find_node(&PeerId::random()).await.unwrap();
+    }
+
+    log::trace!(
+        "switch network is {:?}, listen={:?}",
+        switch.nat().await,
+        switch.listen_addrs().await
+    );
+
+    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
+        .parse()
+        .unwrap();
+
+    let now = Instant::now();
+
+    let peer_info = kad.find_node(&peer_id).await.unwrap().expect("found peer");
+
+    log::trace!(
+        "kad search peer_d={}, times={:?} success",
+        peer_id,
+        now.elapsed(),
+    );
+
+    let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
+
+    let addrs = peer_info
+        .addrs
+        .iter()
+        .flat_map(|addr| {
+            if addr.ends_with(&circuit_suffix) {
+                Some(addr.clone().with_p2p(peer_id))
+            } else {
+                None
+            }
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
+
+    let now = Instant::now();
+
+    let (mut stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
+
+    loop {
+        XStackRpc::xstack_ping(&mut stream).await.unwrap();
+
+        log::trace!(
+            "circuit_v2 ping peer_id={}: times={:?}, raddr={}",
+            peer_id,
+            now.elapsed(),
+            stream.peer_addr(),
+        );
+
+        sleep(Duration::from_secs(60)).await;
+    }
+}
+
+#[futures_test::test]
 async fn stop_server() {
     let switch = init().await;
 

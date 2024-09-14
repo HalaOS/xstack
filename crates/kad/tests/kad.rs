@@ -243,7 +243,7 @@ async fn test_ping() {
 
     ProtocolStream::ping_with(
         &switch,
-        "/ip4/107.173.86.71/udp/4001/quic/p2p/12D3KooWGDrZPTx1LrGevpVj1Djn9dni9cDJRYSe9MtMLHmwJQNz",
+        "/ip4/107.173.86.71/udp/4001/quic-v1/p2p/12D3KooWGDrZPTx1LrGevpVj1Djn9dni9cDJRYSe9MtMLHmwJQNz",
     )
     .await
     .unwrap();
