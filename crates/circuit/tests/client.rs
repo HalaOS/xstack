@@ -148,7 +148,7 @@ async fn upgrade() {
         switch.listen_addrs().await
     );
 
-    let peer_id = "12D3KooWFkJVNd1wQioQtjatPtBk7XaXhxRbQEb1MDPiqaZhAuQz"
+    let peer_id = "12D3KooWRU3k4exFQdNQdoZZEkbmtUnTZLHtaTQuCqg4G2QsZKNP"
         .parse()
         .unwrap();
 
@@ -254,4 +254,14 @@ async fn stop_server() {
         .unwrap();
 
     stream.xstack_ping().await.unwrap();
+}
+
+#[futures_test::test]
+async fn test_connect() {
+    let switch = init().await;
+
+    switch
+        .connect("/ip4/222.212.88.221/tcp/4001", [PROTOCOL_IPFS_PING])
+        .await
+        .unwrap();
 }

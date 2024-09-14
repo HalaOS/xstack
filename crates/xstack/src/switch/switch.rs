@@ -239,7 +239,11 @@ impl Switch {
             .get_transport_by_address(raddr)
             .ok_or(Error::UnspportMultiAddr(raddr.to_owned()))?;
 
-        let mut conn = transport.connect(self, raddr).await?;
+        let mut conn = transport
+            .connect(self, raddr)
+            .timeout(self.timeout)
+            .await
+            .ok_or(Error::Timeout)??;
 
         if let Err(err) = self.handshake(&mut conn).await {
             log::error!("{}, setup error: {}", raddr, err);
