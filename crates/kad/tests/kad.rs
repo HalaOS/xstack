@@ -2,7 +2,6 @@ use std::{str::FromStr, sync::Once};
 
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 use xstack::{
-    global_switch,
     identity::{Keypair, PeerId},
     PeerInfo, ProtocolStream, Switch,
 };
@@ -183,7 +182,7 @@ async fn add_provider() {
     let id = PeerId::random();
 
     let peer_info = PeerInfo {
-        id: global_switch().local_id().clone(),
+        id: switch.local_id().clone(),
         addrs: vec!["/ip4/89.58.16.110/udp/37530/quic-v1".parse().unwrap()],
         ..Default::default()
     };

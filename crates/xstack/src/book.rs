@@ -127,6 +127,8 @@ pub mod peerbook_syscall {
 
         /// Randomly select peers by protoco_id.
         async fn choose_peers(&self, protocol_id: &str, limits: usize) -> Result<Vec<PeerId>>;
+
+        async fn choose_nat_peers(&self, limits: usize) -> Result<Vec<Multiaddr>>;
     }
 }
 
@@ -242,5 +244,28 @@ impl peerbook_syscall::DriverPeerBook for MemoryPeerBook {
                 }
             })
             .choose_multiple(&mut thread_rng(), maximun))
+    }
+
+    async fn choose_nat_peers(&self, limits: usize) -> Result<Vec<Multiaddr>> {
+        use multiaddr::Protocol;
+
+        let raw = self.0.lock().await;
+
+        let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
+
+        let mut raddrs = vec![];
+
+        for (addr, id) in &raw.peer_addrs {
+            if addr.ends_with(&circuit_suffix) {
+                if let Ok(addr) = addr.clone().with_p2p(id.clone()) {
+                    raddrs.push(addr);
+                    if raddrs.len() == limits {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Ok(raddrs)
     }
 }

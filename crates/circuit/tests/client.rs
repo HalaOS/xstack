@@ -12,9 +12,7 @@ use xstack::{
     AutoNAT, Switch, XStackRpc, PROTOCOL_IPFS_PING,
 };
 use xstack_autonat::AutoNatClient;
-use xstack_circuit::{
-    CircuitStopServer, CircuitTransport, DCUtRUpgrader, PROTOCOL_CIRCUIT_RELAY_STOP,
-};
+use xstack_circuit::{CircuitStopServer, CircuitTransport, DCUtRUpgrader};
 use xstack_dnsaddr::DnsAddr;
 use xstack_kad::KademliaRouter;
 use xstack_quic::QuicTransport;
@@ -115,88 +113,7 @@ async fn client_connect() {
 async fn upgrade() {
     let switch = init().await;
 
-    let kad = KademliaRouter::with(&switch)
-            .with_seeds([
-                "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-		        "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-		        "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-		        "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
-            ])
-            .await
-            .unwrap();
-
-    AutoNatClient::bind_with(&switch);
-
-    DCUtRUpgrader::bind_with(&switch);
-
-    CircuitStopServer::bind_with(&switch).start();
-
-    while switch.nat().await == AutoNAT::Unknown || switch.listen_addrs().await.is_empty() {
-        log::trace!(
-            "switch network is {:?}, listen={:?}",
-            switch.nat().await,
-            switch.listen_addrs().await
-        );
-        kad.find_node(&PeerId::random()).await.unwrap();
-    }
-
-    log::trace!(
-        "switch network is {:?}, listen={:?}",
-        switch.nat().await,
-        switch.listen_addrs().await
-    );
-
-    let peers = switch
-        .choose_peers(PROTOCOL_CIRCUIT_RELAY_STOP, 100)
-        .await
-        .unwrap();
-
-    let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
-
-    for peer_id in peers {
-        if let Some(peer_info) = switch.lookup_peer_info(&peer_id).await.unwrap() {
-            let addrs = peer_info
-                .addrs
-                .iter()
-                .flat_map(|addr| {
-                    if addr.ends_with(&circuit_suffix) {
-                        Some(addr.clone().with_p2p(peer_id))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .unwrap();
-
-            if !addrs.is_empty() {
-                log::trace!("find target={}, raddrs={:?}", peer_id, addrs);
-
-                let now = Instant::now();
-
-                let (mut stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
-
-                loop {
-                    XStackRpc::xstack_ping(&mut stream).await.unwrap();
-
-                    log::trace!(
-                        "circuit_v2 ping peer_id={}: times={:?}, raddr={}",
-                        peer_id,
-                        now.elapsed(),
-                        stream.peer_addr(),
-                    );
-
-                    sleep(Duration::from_secs(60)).await;
-                }
-            }
-        }
-    }
-}
-
-#[futures_test::test]
-async fn upgrade1() {
-    let switch = init().await;
+    log::trace!("local: {}", switch.local_id());
 
     let kad = KademliaRouter::with(&switch)
             .with_seeds([
@@ -231,7 +148,7 @@ async fn upgrade1() {
         switch.listen_addrs().await
     );
 
-    let peer_id = "12D3KooWLjoYKVxbGGwLwaD4WHWM9YiDpruCYAoFBywJu3CJppyB"
+    let peer_id = "12D3KooWFkJVNd1wQioQtjatPtBk7XaXhxRbQEb1MDPiqaZhAuQz"
         .parse()
         .unwrap();
 
@@ -260,19 +177,17 @@ async fn upgrade1() {
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
-    let now = Instant::now();
-
-    let (mut stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
+    let (_stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
 
     loop {
-        XStackRpc::xstack_ping(&mut stream).await.unwrap();
+        // XStackRpc::xstack_ping(&mut stream).await.unwrap();
 
-        log::trace!(
-            "circuit_v2 ping peer_id={}: times={:?}, raddr={}",
-            peer_id,
-            now.elapsed(),
-            stream.peer_addr(),
-        );
+        // log::trace!(
+        //     "circuit_v2 ping peer_id={}: times={:?}, raddr={}",
+        //     peer_id,
+        //     now.elapsed(),
+        //     stream.peer_addr(),
+        // );
 
         sleep(Duration::from_secs(60)).await;
     }
@@ -339,14 +254,4 @@ async fn stop_server() {
         .unwrap();
 
     stream.xstack_ping().await.unwrap();
-}
-
-#[futures_test::test]
-async fn connect_router() {
-    let switch = init().await;
-
-    switch
-        .connect("/ip4/118.114.14.49/tcp/37968", [PROTOCOL_IPFS_PING])
-        .await
-        .unwrap();
 }
