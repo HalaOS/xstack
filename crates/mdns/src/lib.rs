@@ -213,7 +213,5 @@ mod tests {
         let _mdns = MdnsProtocol::bind_with(&switch, Duration::from_secs(4))
             .await
             .unwrap();
-
-        sleep(Duration::from_secs(10000)).await;
     }
 }
