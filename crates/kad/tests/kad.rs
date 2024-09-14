@@ -59,48 +59,48 @@ async fn find_node() {
 
     let mut i = 0;
 
-    loop {
-        // let peer_id = switch.local_id();
+    // loop {
+    // let peer_id = switch.local_id();
 
-        let peer_id = if i % 2 == 0 {
-            switch.local_id().clone()
-        } else {
-            PeerId::random()
-        };
+    let peer_id = if i % 2 == 0 {
+        switch.local_id().clone()
+    } else {
+        PeerId::random()
+    };
 
-        i += 1;
+    i += 1;
 
-        let peer_info = kad.find_node(&peer_id).await.unwrap();
+    let peer_info = kad.find_node(&peer_id).await.unwrap();
 
-        log::info!("find_node: {}, {:?}", peer_id, peer_info);
+    log::info!("find_node: {}, {:?}", peer_id, peer_info);
 
-        let mut transport_status = String::new();
+    let mut transport_status = String::new();
 
-        use std::fmt::Write;
+    use std::fmt::Write;
 
-        for transport in &switch.transports {
-            _ = write!(
-                &mut transport_status,
-                "{}({}), ",
-                transport.name(),
-                transport.activities()
-            );
-        }
-
-        log::info!("observed addrs: {:?}", switch.observed_addrs().await);
-
-        log::info!(
-            "{} switch({}) kad({}), autonat({:?}), connector({}), {}",
-            i,
-            switch.peer_book.len().await,
-            kad.len(),
-            switch.nat().await,
-            switch.connector.len().await,
-            transport_status,
+    for transport in &switch.transports {
+        _ = write!(
+            &mut transport_status,
+            "{}({}), ",
+            transport.name(),
+            transport.activities()
         );
-
-        // snapshot();
     }
+
+    log::info!("observed addrs: {:?}", switch.observed_addrs().await);
+
+    log::info!(
+        "{} switch({}) kad({}), autonat({:?}), connector({}), {}",
+        i,
+        switch.peer_book.len().await,
+        kad.len(),
+        switch.nat().await,
+        switch.connector.len().await,
+        transport_status,
+    );
+
+    // snapshot();
+    // }
 }
 
 #[futures_test::test]
