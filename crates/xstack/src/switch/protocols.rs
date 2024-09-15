@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use futures::{AsyncReadExt, AsyncWriteExt};
 use libp2p_identity::{PeerId, PublicKey};
-use multiaddr::Multiaddr;
+use multiaddr::{Multiaddr, Protocol};
 
 use protobuf::Message;
 
@@ -78,6 +78,19 @@ impl Switch {
             .map(|buf| Multiaddr::try_from(buf).map_err(Into::into))
             .collect::<Result<Vec<_>>>()?;
 
+        let observed_addrs = observed_addrs
+            .into_iter()
+            .filter(|addr| {
+                for proto in addr.iter() {
+                    if proto == Protocol::P2pCircuit {
+                        return false;
+                    }
+                }
+
+                return true;
+            })
+            .collect();
+
         log::info!("{} observed addrs: {:?}", peer_id, observed_addrs);
 
         log::info!("{} protos: {:?}", peer_id, identity.protocols);
@@ -137,11 +150,11 @@ impl Switch {
     pub(super) async fn identity_response(&self, mut stream: ProtocolStream) -> Result<()> {
         log::trace!("handle identity request");
 
-        let peer_addr = stream.peer_addr();
-
         let mut identity = Identity::new();
 
-        identity.set_observedAddr(peer_addr.to_vec());
+        if !stream.is_relay() {
+            identity.set_observedAddr(stream.peer_addr().to_vec());
+        }
 
         identity.set_publicKey(self.local_public_key().encode_protobuf());
 

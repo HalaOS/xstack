@@ -186,6 +186,7 @@ impl Switch {
 
         while let Some(mut conn) = incoming.try_next().await? {
             log::trace!(
+                target:"client",
                 "accept a new incoming connection, peer={}, local={}",
                 conn.peer_addr(),
                 conn.local_addr()

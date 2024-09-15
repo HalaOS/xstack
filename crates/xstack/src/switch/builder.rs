@@ -49,7 +49,7 @@ impl SwitchOptions {
             max_observed_addrs_len: 5,
             connect_replication: 3,
             agent_version,
-            timeout: Duration::from_secs(5),
+            timeout: Duration::from_secs(20),
             max_packet_size: 1024 * 1024 * 4,
             transports: vec![],
             keystore: MemoryKeyStore::random().into(),

@@ -84,6 +84,7 @@ pub struct TlsListener<Incoming> {
     incoming: Incoming,
     /// the counter for actives connections.
     activities: Arc<AtomicUsize>,
+    is_relay: bool,
 }
 
 impl<Incoming> TlsListener<Incoming> {
@@ -93,12 +94,14 @@ impl<Incoming> TlsListener<Incoming> {
         local_addr: Multiaddr,
         incoming: Incoming,
         activities: Arc<AtomicUsize>,
+        is_relay: bool,
     ) -> Result<Self> {
         Ok(Self {
             switch: switch.clone(),
             activities,
             incoming,
             local_addr,
+            is_relay,
         })
     }
 }
@@ -126,6 +129,7 @@ where
             raddr,
             &ssl_acceptor,
             self.activities.clone(),
+            self.is_relay,
         )
         .await?
         .into())
@@ -147,6 +151,7 @@ pub struct TlsConn {
     conn: Arc<YamuxConn>,
     stream_count: Arc<AtomicUsize>,
     activities: Arc<AtomicUsize>,
+    is_relay: bool,
 }
 
 impl Drop for TlsConn {
@@ -163,6 +168,7 @@ impl TlsConn {
         local_addr: Multiaddr,
         peer_addr: Multiaddr,
         actives: Arc<AtomicUsize>,
+        is_relay: bool,
     ) -> Result<Self>
     where
         S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
@@ -224,7 +230,9 @@ impl TlsConn {
 
         let (_, _) = dialer_select_proto(&mut stream, ["/yamux/1.0.0"], Version::V1).await?;
 
-        let conn = TlsConn::new(stream, false, public_key, local_addr, peer_addr, actives)?;
+        let conn = TlsConn::new(
+            stream, false, public_key, local_addr, peer_addr, actives, is_relay,
+        )?;
 
         Ok(conn.into())
     }
@@ -235,6 +243,7 @@ impl TlsConn {
         peer_addr: Multiaddr,
         acceptor: &SslAcceptor,
         actives: Arc<AtomicUsize>,
+        is_relay: bool,
     ) -> Result<Self>
     where
         S: AsyncRead + AsyncWrite + Sync + Send + Unpin + 'static,
@@ -254,7 +263,9 @@ impl TlsConn {
 
         let (_, _) = listener_select_proto(&mut stream, ["/yamux/1.0.0"]).await?;
 
-        let conn = TlsConn::new(stream, true, public_key, local_addr, peer_addr, actives)?;
+        let conn = TlsConn::new(
+            stream, true, public_key, local_addr, peer_addr, actives, is_relay,
+        )?;
 
         Ok(conn.into())
     }
@@ -266,6 +277,7 @@ impl TlsConn {
         local_addr: Multiaddr,
         peer_addr: Multiaddr,
         activities: Arc<AtomicUsize>,
+        is_relay: bool,
     ) -> Result<Self>
     where
         S: AsyncRead + AsyncWrite + Sync + Send + 'static,
@@ -276,6 +288,7 @@ impl TlsConn {
         let conn = futures_yamux::YamuxConn::new_with(INIT_WINDOW_SIZE, is_server, read, write);
 
         Ok(Self {
+            is_relay,
             local_addr,
             peer_addr,
             conn: Arc::new(conn),
@@ -328,6 +341,7 @@ impl DriverConnection for TlsConn {
             self.peer_addr.clone(),
             self.stream_count.clone(),
             stream,
+            self.is_relay,
         )
         .into())
     }
@@ -342,6 +356,7 @@ impl DriverConnection for TlsConn {
             self.peer_addr.clone(),
             self.stream_count.clone(),
             stream,
+            self.is_relay,
         )
         .into())
     }
@@ -350,6 +365,10 @@ impl DriverConnection for TlsConn {
         self.conn.close(Reason::Normal)?;
 
         Ok(())
+    }
+
+    fn is_relay(&self) -> bool {
+        return self.is_relay;
     }
 }
 
@@ -362,6 +381,7 @@ pub struct TlsStream {
     peer_addr: Multiaddr,
     stream_counter: Arc<AtomicUsize>,
     stream: YamuxStream,
+    is_relay: bool,
 }
 
 impl Drop for TlsStream {
@@ -378,6 +398,7 @@ impl TlsStream {
         peer_addr: Multiaddr,
         stream_counter: Arc<AtomicUsize>,
         stream: YamuxStream,
+        is_relay: bool,
     ) -> Self {
         stream_counter.fetch_add(1, Ordering::Relaxed);
 
@@ -389,6 +410,7 @@ impl TlsStream {
             public_key,
             local_addr,
             peer_addr,
+            is_relay,
         }
     }
 }
@@ -438,5 +460,9 @@ impl DriverStream for TlsStream {
 
     fn poll_close(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         Pin::new(&mut self.stream).poll_close(cx)
+    }
+
+    fn is_relay(&self) -> bool {
+        self.is_relay
     }
 }

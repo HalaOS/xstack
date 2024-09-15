@@ -171,6 +171,8 @@ pub mod transport_syscall {
 
         /// Returns the count of active stream.
         fn actives(&self) -> usize;
+        /// Returns true if the underlying connection is over a replay proocol.
+        fn is_relay(&self) -> bool;
     }
 
     /// The [*stream muliplexing*](https://docs.libp2p.io/concepts/multiplex/overview/)
@@ -208,6 +210,9 @@ pub mod transport_syscall {
 
         /// Close this connection.
         fn poll_close(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>>;
+
+        /// Returns true if the underlying connection is over a replay proocol.
+        fn is_relay(&self) -> bool;
     }
 }
 

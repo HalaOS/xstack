@@ -1,9 +1,6 @@
 use futures::TryStreamExt;
 use rasi::task::spawn_ok;
-use xstack::{
-    multiaddr::{is_quic_transport, is_tcp_transport},
-    ProtocolStream, Switch,
-};
+use xstack::{multiaddr::is_quic_transport, ProtocolStream, Switch};
 
 use crate::{DCUtRRpc, Result, PROTOCOL_DCUTR};
 
@@ -78,14 +75,6 @@ impl DCUtRUpgrader {
                     continue;
                 }
             }
-
-            if is_tcp_transport(&addr) {
-                if let Some(laddr) = observed_addrs.iter().find(|raddr| is_tcp_transport(raddr)) {
-                    laddrs.push(laddr.clone());
-                    sync_addrs.push(addr);
-                    continue;
-                }
-            }
         }
 
         log::trace!("Connect response: {:?}", laddrs);
@@ -106,8 +95,11 @@ impl DCUtRUpgrader {
         for addr in sync_addrs {
             log::info!("try hole punching to {}", addr);
             match self.switch.transport_connect(&addr).await {
-                Ok(_) => {
-                    self.switch.connector.close(stream.conn_id()).await;
+                Ok(conn) => {
+                    self.switch
+                        .connector
+                        .replace(conn, stream.conn_id(), false)
+                        .await;
 
                     log::trace!("hole punching to {}, is success.", addr);
 

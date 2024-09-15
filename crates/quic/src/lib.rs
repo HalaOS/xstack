@@ -341,6 +341,10 @@ impl DriverConnection for QuicP2pConn {
     fn actives(&self) -> usize {
         self.counter.load(Ordering::Relaxed)
     }
+
+    fn is_relay(&self) -> bool {
+        false
+    }
 }
 
 struct QuicP2pStream {
@@ -430,6 +434,10 @@ impl DriverStream for QuicP2pStream {
     /// Close this connection.
     fn poll_close(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         Pin::new(&mut self.stream).poll_close(cx)
+    }
+
+    fn is_relay(&self) -> bool {
+        false
     }
 }
 

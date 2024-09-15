@@ -114,6 +114,7 @@ impl DriverTransport for CircuitTransport {
             local_addr,
             peer_addr,
             self.activities.clone(),
+            true,
         )
         .await
         {

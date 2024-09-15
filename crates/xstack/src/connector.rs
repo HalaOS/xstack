@@ -46,6 +46,9 @@ pub mod connector_syscall {
         /// host an incoming [`P2pConn`].
         async fn incoming(&self, conn: P2pConn);
 
+        /// Replace a connection from the inner pool.
+        async fn replace(&self, conn: P2pConn, replaced: &str, inbound: bool);
+
         /// Close a connection by `conn_id` and remove it from thie inner pool.
         async fn close(&self, conn_id: &str);
 
@@ -261,6 +264,13 @@ impl connector_syscall::DriverConnector for ConnPool {
     /// host an incoming [`P2pConn`].
     async fn incoming(&self, conn: P2pConn) {
         self.raw.lock().await.add(conn, true)
+    }
+
+    async fn replace(&self, conn: P2pConn, replaced: &str, inbound: bool) {
+        let mut raw = self.raw.lock().await;
+
+        raw.remove(&replaced);
+        raw.add(conn, inbound);
     }
 
     /// Close a connection by `conn_id` and remove it from thie inner pool.

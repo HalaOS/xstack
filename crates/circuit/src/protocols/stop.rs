@@ -15,10 +15,13 @@ use futures::{
     SinkExt, StreamExt, TryStreamExt,
 };
 use futures_map::FuturesUnorderedMap;
-use rasi::{task::spawn_ok, timer::sleep};
+use rasi::{
+    task::spawn_ok,
+    timer::{sleep, sleep_until},
+};
 use xstack::{
     events,
-    multiaddr::{Multiaddr, Protocol},
+    multiaddr::{is_quic_transport, Multiaddr, Protocol},
     transport_syscall::DriverListener,
     AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolStream, Switch, XStackRpc,
     PROTOCOL_IPFS_PING,
@@ -26,7 +29,7 @@ use xstack::{
 use xstack_tls::{create_ssl_acceptor, TlsConn};
 
 use crate::{
-    CircuitV2Rpc, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP, PROTOCOL_DCUTR,
+    CircuitV2Rpc, DCUtRRpc, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP, PROTOCOL_DCUTR,
 };
 
 struct CircuitStopListener(Receiver<P2pConn>);
@@ -67,7 +70,7 @@ impl CircuitStopServerBuilder {
         self
     }
 
-    /// Override default `channel_limits` configuration, the default value is `5`.
+    /// Override default `channel_limits` configuration, the default value is `2`.
     ///
     /// This value limits the maximun number of [`reservation`] channels.
     ///
@@ -143,13 +146,8 @@ impl CircuitStopServerBuilder {
             }
         };
 
-        self.protocol_incoming_loop(
-            sender,
-            listener,
-            self.activities.clone(),
-            self.switch.max_packet_size,
-        )
-        .await;
+        self.protocol_incoming_loop(sender, listener, self.activities.clone())
+            .await;
     }
 
     async fn run_reservation_client(&self) {
@@ -270,11 +268,9 @@ impl CircuitStopServerBuilder {
         sender: Sender<P2pConn>,
         listener: ProtocolListener,
         activities: Arc<AtomicUsize>,
-        max_packet_size: usize,
     ) {
         if let Err(err) =
-            Self::circuit_stop_server_loop_prv(self, sender, listener, activities, max_packet_size)
-                .await
+            Self::circuit_stop_server_loop_prv(self, sender, listener, activities).await
         {
             log::error!("circuit_stop_server_loop, stopped with error {}", err)
         } else {
@@ -287,7 +283,6 @@ impl CircuitStopServerBuilder {
         sender: Sender<P2pConn>,
         listener: ProtocolListener,
         activities: Arc<AtomicUsize>,
-        max_packet_size: usize,
     ) -> Result<()> {
         let mut incoming = listener.into_incoming();
 
@@ -305,10 +300,7 @@ impl CircuitStopServerBuilder {
 
             spawn_ok(async move {
                 let peer_id = stream.public_key().to_peer_id();
-                if let Err(err) = this
-                    .handle_stop_incoming(stream, sender, activities, max_packet_size)
-                    .await
-                {
+                if let Err(err) = this.handle_stop_incoming(stream, sender, activities).await {
                     log::error!(
                         "handle incoming({}) stop stream with error: {}",
                         peer_id,
@@ -325,21 +317,27 @@ impl CircuitStopServerBuilder {
         mut stream: ProtocolStream,
         mut sender: Sender<P2pConn>,
         activities: Arc<AtomicUsize>,
-        max_packet_size: usize,
     ) -> Result<()> {
-        CircuitV2Rpc::circuit_v2_stop_connect_accept(&mut stream, max_packet_size).await?;
+        CircuitV2Rpc::circuit_v2_stop_connect_accept(&mut stream, self.switch.max_packet_size)
+            .await?;
 
         let local_addr = stream.local_addr().clone();
         let peer_addr = stream.peer_addr().clone();
 
         let ssl_acceptor = create_ssl_acceptor(&self.switch).await?;
 
-        let conn: P2pConn =
-            TlsConn::accept(stream, local_addr, peer_addr, &ssl_acceptor, activities)
-                .await?
-                .into();
+        let conn: P2pConn = TlsConn::accept(
+            stream,
+            local_addr,
+            peer_addr,
+            &ssl_acceptor,
+            activities,
+            true,
+        )
+        .await?
+        .into();
 
-        // spawn_ok(self.try_upgrade(conn.clone()));
+        spawn_ok(self.try_upgrade(conn.clone()));
 
         Ok(sender
             .send(conn)
@@ -347,22 +345,80 @@ impl CircuitStopServerBuilder {
             .map_err(|_| Error::new(ErrorKind::BrokenPipe, ""))?)
     }
 
-    #[allow(unused)]
     async fn try_upgrade(self, mut conn: P2pConn) {
-        if let Err(err) = self.try_upgrade_prv(&mut conn).await {
-            log::error!(
-                "try upgrade circuit conn failed, from={}, err={}",
-                conn.peer_addr(),
-                err
-            );
+        for i in 0..3 {
+            log::trace!("upgrade try {}", i);
+            if let Err(err) = self.try_upgrade_prv(&mut conn).await {
+                log::error!(
+                    "try upgrade circuit conn failed, from={}, err={}",
+                    conn.peer_addr(),
+                    err
+                );
+            } else {
+                log::trace!("upgrade try {}, succ", i);
+                break;
+            }
         }
     }
 
     async fn try_upgrade_prv(&self, conn: &mut P2pConn) -> Result<()> {
         // try handshake with DCUtR.
-        let (_stream, _) = conn.connect([PROTOCOL_DCUTR]).await.unwrap();
+        let (mut stream, _) = conn.connect([PROTOCOL_DCUTR]).await?;
 
-        todo!()
+        let observed_addrs = self.switch.observed_addrs().await;
+
+        log::trace!("observed_addrs, {:?}", observed_addrs);
+
+        let observed_addrs = observed_addrs
+            .into_iter()
+            .filter(|addr| is_quic_transport(addr))
+            .collect::<Vec<_>>();
+
+        let timer = Instant::now();
+
+        (&mut stream).dcutr_send_connect(&observed_addrs).await?;
+
+        log::trace!("dcutr_send_connect, succ");
+
+        let raddrs = (&mut stream)
+            .dcutr_recv_connect(self.switch.max_packet_size)
+            .await?;
+
+        if raddrs.is_empty() {
+            log::warn!("dcutr_recv_connect returns: []");
+            return Ok(());
+        }
+
+        let duration = timer.elapsed() / 2;
+
+        let timeout_at = Instant::now() + duration;
+
+        log::warn!("dcutr_recv_connect returns: {:?}", raddrs);
+
+        (&mut stream).dcutr_send_sync().await?;
+
+        sleep_until(timeout_at).await;
+
+        let mut last_error = None;
+
+        for raddr in raddrs {
+            log::error!("try hole punching to {}", raddr);
+            match self.switch.transport_connect(&raddr).await {
+                Ok(direct_conn) => {
+                    self.switch
+                        .connector
+                        .replace(direct_conn, conn.id(), false)
+                        .await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    log::error!("hole punching to {} with error: {}", raddr, err);
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        Err(last_error.unwrap().into())
     }
 }
 
@@ -390,7 +446,7 @@ impl CircuitStopServer {
             switch: switch.clone(),
             incoming_buffer: 100,
             activities: Default::default(),
-            channel_limits: 2,
+            channel_limits: 1,
             ping_duration: Duration::from_secs(5),
         }
     }

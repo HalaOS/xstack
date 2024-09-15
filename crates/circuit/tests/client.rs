@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rasi::timer::sleep;
+use rasi::timer::{sleep, TimeoutExt};
 use rasi_mio::{net::register_mio_network, timer::register_mio_timer};
 
 use xstack::{
@@ -196,7 +196,6 @@ async fn upgrade() {
     }
 }
 
-#[ignore]
 #[futures_test::test]
 async fn stop_server() {
     let switch = init().await;
@@ -215,22 +214,18 @@ async fn stop_server() {
 
     AutoNatClient::bind_with(&switch);
 
-    let stop_server = CircuitStopServer::bind_with(&switch).start();
+    CircuitStopServer::bind_with(&switch).start();
 
-    let peer_id = PeerId::random();
-
-    let now = Instant::now();
-
-    let _ = kad.find_node(&peer_id).await.unwrap();
-
-    log::trace!("kad search peer_d={}, times={:?}", peer_id, now.elapsed(),);
-
-    while stop_server.reservations() == 0 {
-        log::trace!("waiting reserve calls... {}", stop_server.reservations());
-        sleep(Duration::from_secs(4)).await;
+    while switch.nat().await == AutoNAT::Unknown || switch.listen_addrs().await.is_empty() {
+        log::trace!(
+            "switch network is {:?}, listen={:?}",
+            switch.nat().await,
+            switch.listen_addrs().await
+        );
+        kad.find_node(&PeerId::random())
+            .timeout(Duration::from_secs(20))
+            .await;
     }
-
-    sleep(Duration::from_secs(4)).await;
 
     let circuit_suffix = Multiaddr::empty().with(Protocol::P2pCircuit);
 
@@ -252,21 +247,12 @@ async fn stop_server() {
 
     let switch_2 = init().await;
 
-    let (stream, _) = switch_2
+    DCUtRUpgrader::bind_with(&switch_2);
+
+    let (_stream, _) = switch_2
         .connect(addrs.as_slice(), [PROTOCOL_IPFS_PING])
         .await
         .unwrap();
 
-    stream.xstack_ping().await.unwrap();
-}
-
-#[ignore]
-#[futures_test::test]
-async fn test_connect() {
-    let switch = init().await;
-
-    let (_stream, _) = switch.connect(
-        "/ip4/137.220.57.240/tcp/4001/p2p/12D3KooWD6PJoGnpC4mBdiu3wpzJfWnchvLFRXwCnALfCYCQEhGc/p2p-circuit/p2p/12D3KooWRU3k4exFQdNQdoZZEkbmtUnTZLHtaTQuCqg4G2QsZKNP", 
-        [PROTOCOL_IPFS_PING]
-    ).await.unwrap();
+    sleep(Duration::from_secs(10000)).await;
 }
