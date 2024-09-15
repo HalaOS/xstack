@@ -16,15 +16,16 @@ use futures::{
 };
 use futures_map::FuturesUnorderedMap;
 use rasi::{
+    net::UdpSocket,
     task::spawn_ok,
     timer::{sleep, sleep_until},
 };
 use xstack::{
     events,
-    multiaddr::{is_quic_transport, Multiaddr, Protocol},
+    multiaddr::{is_quic_transport, Multiaddr, Protocol, ToSockAddr},
     transport_syscall::DriverListener,
     AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolStream, Switch, XStackRpc,
-    PROTOCOL_IPFS_PING,
+    PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING,
 };
 use xstack_tls::{create_ssl_acceptor, TlsConn};
 
@@ -361,7 +362,55 @@ impl CircuitStopServerBuilder {
         }
     }
 
+    async fn upgrade_prepare_mapping(&self) -> crate::Result<()> {
+        let peers = self.switch.choose_peers(PROTOCOL_IPFS_ID, 100).await?;
+
+        for peer_id in peers {
+            if let Some(peer_info) = self.switch.lookup_peer_info(&peer_id).await? {
+                for addr in peer_info.addrs {
+                    if is_quic_transport(&addr) {
+                        log::trace!("conn to {}", addr);
+                        let mut conn = self.switch.transport_connect(&addr).await?;
+
+                        let (stream, _) = conn.connect([PROTOCOL_IPFS_ID]).await?;
+
+                        let local_addr = stream.local_addr().to_sockaddr()?;
+
+                        let identity = stream
+                            .xstack_recv_identity(self.switch.max_packet_size)
+                            .await?;
+
+                        log::trace!("conn to {}, identity handshaked", addr);
+
+                        if let Some(observed) = identity.observedAddr {
+                            let observed = Multiaddr::try_from(observed)?;
+
+                            log::trace!("observed: {} => {}", local_addr, observed);
+
+                            conn.close()?;
+
+                            for _ in 0..5 {
+                                sleep(Duration::from_secs(1)).await;
+
+                                log::trace!("try rebind to {}", local_addr);
+
+                                if UdpSocket::bind(local_addr).await.is_ok() {
+                                    log::trace!("rebind to {} success", local_addr);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        todo!()
+    }
+
     async fn try_upgrade_prv(&self, conn: &mut P2pConn) -> Result<()> {
+        self.upgrade_prepare_mapping().await?;
+
         // try handshake with DCUtR.
         let (mut stream, _) = conn.connect([PROTOCOL_DCUTR]).await?;
 
