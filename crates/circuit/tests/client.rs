@@ -22,7 +22,7 @@ async fn init() -> Switch {
     static INIT: Once = Once::new();
 
     INIT.call_once(|| {
-        // _ = pretty_env_logger::try_init_timed();
+        _ = pretty_env_logger::try_init_timed();
 
         register_mio_network();
         register_mio_timer();
@@ -110,7 +110,6 @@ async fn client_connect() {
     );
 }
 
-#[ignore]
 #[futures_test::test]
 async fn upgrade() {
     let switch = init().await;
@@ -178,6 +177,8 @@ async fn upgrade() {
         })
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
+
+    log::trace!("connect to {:?}", addrs);
 
     let (_stream, _) = switch.connect(addrs, [PROTOCOL_IPFS_PING]).await.unwrap();
 
@@ -264,8 +265,8 @@ async fn stop_server() {
 async fn test_connect() {
     let switch = init().await;
 
-    switch
-        .connect("/ip4/222.212.88.221/tcp/4001", [PROTOCOL_IPFS_PING])
-        .await
-        .unwrap();
+    let (_stream, _) = switch.connect(
+        "/ip4/137.220.57.240/tcp/4001/p2p/12D3KooWD6PJoGnpC4mBdiu3wpzJfWnchvLFRXwCnALfCYCQEhGc/p2p-circuit/p2p/12D3KooWRU3k4exFQdNQdoZZEkbmtUnTZLHtaTQuCqg4G2QsZKNP", 
+        [PROTOCOL_IPFS_PING]
+    ).await.unwrap();
 }

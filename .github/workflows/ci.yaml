@@ -25,4 +25,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --workspace --exclude reweb3-num --exclude futures-quic --exclude xstack-circuit
+          args: --workspace --exclude reweb3-num --exclude futures-quic --exclude xstack-circuit --exclude xstack-kad

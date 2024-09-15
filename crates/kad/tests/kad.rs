@@ -32,7 +32,6 @@ async fn init() -> Switch {
         .unwrap()
 }
 
-#[ignore]
 #[futures_test::test]
 async fn find_node() {
     // use hala_pprof_memory::snapshot;

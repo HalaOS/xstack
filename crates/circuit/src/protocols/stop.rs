@@ -358,7 +358,7 @@ impl CircuitStopServerBuilder {
         }
     }
 
-    async fn try_upgrade_prv(self, conn: &mut P2pConn) -> Result<()> {
+    async fn try_upgrade_prv(&self, conn: &mut P2pConn) -> Result<()> {
         // try handshake with DCUtR.
         let (_stream, _) = conn.connect([PROTOCOL_DCUTR]).await.unwrap();
 
