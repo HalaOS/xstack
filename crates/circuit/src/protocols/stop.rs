@@ -15,23 +15,17 @@ use futures::{
     SinkExt, StreamExt, TryStreamExt,
 };
 use futures_map::FuturesUnorderedMap;
-use rasi::{
-    net::UdpSocket,
-    task::spawn_ok,
-    timer::{sleep, sleep_until},
-};
+use rasi::{task::spawn_ok, timer::sleep};
 use xstack::{
     events,
-    multiaddr::{is_quic_transport, Multiaddr, Protocol, ToSockAddr},
+    multiaddr::{Multiaddr, Protocol},
     transport_syscall::DriverListener,
     AutoNAT, EventSource, P2pConn, ProtocolListener, ProtocolStream, Switch, XStackRpc,
-    PROTOCOL_IPFS_ID, PROTOCOL_IPFS_PING,
+    PROTOCOL_IPFS_PING,
 };
 use xstack_tls::{create_ssl_acceptor, TlsConn};
 
-use crate::{
-    CircuitV2Rpc, DCUtRRpc, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP, PROTOCOL_DCUTR,
-};
+use crate::{CircuitV2Rpc, PROTOCOL_CIRCUIT_RELAY_HOP, PROTOCOL_CIRCUIT_RELAY_STOP};
 
 struct CircuitStopListener(Receiver<P2pConn>);
 
@@ -338,136 +332,10 @@ impl CircuitStopServerBuilder {
         .await?
         .into();
 
-        spawn_ok(self.try_upgrade(conn.clone()));
-
         Ok(sender
             .send(conn)
             .await
             .map_err(|_| Error::new(ErrorKind::BrokenPipe, ""))?)
-    }
-
-    async fn try_upgrade(self, mut conn: P2pConn) {
-        for i in 0..3 {
-            log::trace!("upgrade try {}", i);
-            if let Err(err) = self.try_upgrade_prv(&mut conn).await {
-                log::error!(
-                    "try upgrade circuit conn failed, from={}, err={}",
-                    conn.peer_addr(),
-                    err
-                );
-            } else {
-                log::trace!("upgrade try {}, succ", i);
-                break;
-            }
-        }
-    }
-
-    async fn upgrade_prepare_mapping(&self) -> crate::Result<()> {
-        let peers = self.switch.choose_peers(PROTOCOL_IPFS_ID, 100).await?;
-
-        for peer_id in peers {
-            if let Some(peer_info) = self.switch.lookup_peer_info(&peer_id).await? {
-                for addr in peer_info.addrs {
-                    if is_quic_transport(&addr) {
-                        log::trace!("conn to {}", addr);
-                        let mut conn = self.switch.transport_connect(&addr).await?;
-
-                        let (stream, _) = conn.connect([PROTOCOL_IPFS_ID]).await?;
-
-                        let local_addr = stream.local_addr().to_sockaddr()?;
-
-                        let identity = stream
-                            .xstack_recv_identity(self.switch.max_packet_size)
-                            .await?;
-
-                        log::trace!("conn to {}, identity handshaked", addr);
-
-                        if let Some(observed) = identity.observedAddr {
-                            let observed = Multiaddr::try_from(observed)?;
-
-                            log::trace!("observed: {} => {}", local_addr, observed);
-
-                            conn.close()?;
-
-                            for _ in 0..5 {
-                                sleep(Duration::from_secs(1)).await;
-
-                                log::trace!("try rebind to {}", local_addr);
-
-                                if UdpSocket::bind(local_addr).await.is_ok() {
-                                    log::trace!("rebind to {} success", local_addr);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        todo!()
-    }
-
-    async fn try_upgrade_prv(&self, conn: &mut P2pConn) -> Result<()> {
-        self.upgrade_prepare_mapping().await?;
-
-        // try handshake with DCUtR.
-        let (mut stream, _) = conn.connect([PROTOCOL_DCUTR]).await?;
-
-        let observed_addrs = self.switch.observed_addrs().await;
-
-        log::trace!("observed_addrs, {:?}", observed_addrs);
-
-        let observed_addrs = observed_addrs
-            .into_iter()
-            .filter(|addr| is_quic_transport(addr))
-            .collect::<Vec<_>>();
-
-        let timer = Instant::now();
-
-        (&mut stream).dcutr_send_connect(&observed_addrs).await?;
-
-        log::trace!("dcutr_send_connect, succ");
-
-        let raddrs = (&mut stream)
-            .dcutr_recv_connect(self.switch.max_packet_size)
-            .await?;
-
-        if raddrs.is_empty() {
-            log::warn!("dcutr_recv_connect returns: []");
-            return Ok(());
-        }
-
-        let duration = timer.elapsed() / 2;
-
-        let timeout_at = Instant::now() + duration;
-
-        log::warn!("dcutr_recv_connect returns: {:?}", raddrs);
-
-        (&mut stream).dcutr_send_sync().await?;
-
-        sleep_until(timeout_at).await;
-
-        let mut last_error = None;
-
-        for raddr in raddrs {
-            log::error!("try hole punching to {}", raddr);
-            match self.switch.transport_connect(&raddr).await {
-                Ok(direct_conn) => {
-                    self.switch
-                        .connector
-                        .replace(direct_conn, conn.id(), false)
-                        .await;
-                    return Ok(());
-                }
-                Err(err) => {
-                    log::error!("hole punching to {} with error: {}", raddr, err);
-                    last_error = Some(err);
-                }
-            }
-        }
-
-        Err(last_error.unwrap().into())
     }
 }
 
